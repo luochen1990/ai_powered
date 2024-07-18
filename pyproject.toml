@@ -2,17 +2,20 @@
 name = "ai-powered"
 version = "0.1.0"
 description = "The easiest way to develop AI-Powered applications"
-authors = [ "luochen1990@gmail.com" ]
+authors = [ "Luo Chen <luochen1990@gmail.com>" ]
+include = ["src"]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<4"
 openai = "^1.35.14"
-msgspec = "^0.18.6"
 pydantic = "^2.8.2"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.2.2"
 funix = "^0.5.8"
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
