@@ -3,7 +3,7 @@ from typing import Any, Callable, ParamSpec, TypeVar
 import openai
 import json
 from pydantic import Field, TypeAdapter, create_model
-from .constants import DEBUG, SYSTEM_PROMPT
+from .constants import DEBUG, OPENAI_MODEL_NAME, SYSTEM_PROMPT
 import inspect
 
 P = ParamSpec("P")
@@ -48,19 +48,19 @@ def ai_powered(fn : Callable[P, R]) -> Callable[P, R]:
 
         client = openai.OpenAI() # default api_key = os.environ["OPENAI_API_KEY"], base_url = os.environ["OPENAI_BASE_URL"]
         response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
+            model = OPENAI_MODEL_NAME,
+            messages = [
                 {"role": "system", "content": SYSTEM_PROMPT.format(signature = sig, docstring = docstring)},
                 {"role": "user", "content": real_argument_str}
             ],
-            tools= [{
+            tools = [{
                 "type": "function",
                 "function": {
                     "name": "return_result",
                     "parameters": Result_ta.json_schema(),
                 },
             }],
-            tool_choice= {"type": "function", "function": {"name": "return_result"}},
+            tool_choice = {"type": "function", "function": {"name": "return_result"}},
         )
 
         if DEBUG:

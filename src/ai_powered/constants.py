@@ -3,6 +3,7 @@ import os
 DEBUG = os.environ.get('DEBUG', 'False').lower() in {'true', '1', 'yes', 'on'}
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "sk-1234567890ab-MOCK-API-KEY")
 OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com")
+OPENAI_MODEL_NAME = os.environ.get("OPENAI_MODEL_NAME", "gpt-3.5-turbo")
 
 SYSTEM_PROMPT = """
 You are a function simulator,
