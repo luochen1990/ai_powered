@@ -12,6 +12,7 @@ pydantic = "^2.8.2"
 
 [tool.poetry.group.test.dependencies]
 pytest = "^8.2.2"
+pytest-xdist = "^3.6.1"
 
 [tool.poetry.group.dev.dependencies]
 funix = "^0.5.8"
