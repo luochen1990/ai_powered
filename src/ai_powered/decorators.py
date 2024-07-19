@@ -1,15 +1,18 @@
 from functools import wraps
+import sys
 from typing import Any, Callable, ParamSpec, TypeVar
 import openai
 import json
 from pydantic import Field, TypeAdapter, create_model
 from .constants import DEBUG, OPENAI_MODEL_NAME, SYSTEM_PROMPT
+from .colors import green
 import inspect
 
 P = ParamSpec("P")
 R = TypeVar("R")
 
 def ai_powered(fn : Callable[P, R]) -> Callable[P, R]:
+
     sig = inspect.signature(fn)
     docstring = inspect.getdoc(fn)
 
@@ -36,28 +39,36 @@ def ai_powered(fn : Callable[P, R]) -> Callable[P, R]:
     Result = create_model("Result", result=(sig.return_annotation,Field(...)))
     Result_ta = TypeAdapter(Result)
 
+    sys_prompt = SYSTEM_PROMPT.format(signature = sig, docstring = docstring or "not provided, guess the most possible intention from the function name")
+    result_schema = Result_ta.json_schema()
     if DEBUG:
-        print(f"{Result_ta.json_schema() =}")
+        print(f"{sys_prompt =}")
+        print(f"{result_schema =}")
+
+    if DEBUG:
+        print(green(f"[fn {fn.__name__}] AI is powering up."))
 
     @wraps(fn)
     def wrapped_fn(*args: P.args, **kwargs: P.kwargs) -> R:
-        print('AI is powering up...')
-
         real_argument = sig.bind(*args, **kwargs)
         real_argument_str = json.dumps(real_argument.arguments)
+
+        if DEBUG:
+            print(f"{real_argument_str =}")
+            print(green(f"[fn {fn.__name__}] request prepared."))
 
         client = openai.OpenAI() # default api_key = os.environ["OPENAI_API_KEY"], base_url = os.environ["OPENAI_BASE_URL"]
         response = client.chat.completions.create(
             model = OPENAI_MODEL_NAME,
             messages = [
-                {"role": "system", "content": SYSTEM_PROMPT.format(signature = sig, docstring = docstring)},
+                {"role": "system", "content": sys_prompt},
                 {"role": "user", "content": real_argument_str}
             ],
             tools = [{
                 "type": "function",
                 "function": {
                     "name": "return_result",
-                    "parameters": Result_ta.json_schema(),
+                    "parameters": result_schema,
                 },
             }],
             tool_choice = {"type": "function", "function": {"name": "return_result"}},
@@ -65,6 +76,7 @@ def ai_powered(fn : Callable[P, R]) -> Callable[P, R]:
 
         if DEBUG:
             print(f"{response =}")
+            print(green(f"[fn {fn.__name__}] response received."))
 
         resp_msg = response.choices[0].message
         resp_str = response.choices[0].message.content
@@ -83,7 +95,9 @@ def ai_powered(fn : Callable[P, R]) -> Callable[P, R]:
 
         assert tool_calls is not None
         returned_result_str = tool_calls[0].function.arguments
+        print(green(f"[fn {fn.__name__}] response extracted."))
         returned_result = Result_ta.validate_json(returned_result_str)
+        print(green(f"[fn {fn.__name__}] response validated."))
         return returned_result.result #type: ignore
 
     return wrapped_fn
