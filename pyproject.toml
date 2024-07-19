@@ -19,6 +19,7 @@ funix = "^0.5.8"
 
 [tool.pytest.ini_options]
 testpaths = ["test", "test/examples/**/*.py"]
+addopts = "-n auto"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
