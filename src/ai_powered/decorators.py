@@ -6,7 +6,7 @@ from pydantic import Field, TypeAdapter, create_model
 from ai_powered.llm_adapter.definitions import ModelFeature
 from ai_powered.llm_adapter.generic_adapter import GenericFunctionSimulator
 from ai_powered.llm_adapter.known_models import complete_model_config
-from .constants import DEBUG, OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL_NAME, SYSTEM_PROMPT, SYSTEM_PROMPT_RETURN_SCHEMA
+from .constants import DEBUG, OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL_NAME, SYSTEM_PROMPT, SYSTEM_PROMPT_JSON_SYNTAX, SYSTEM_PROMPT_RETURN_SCHEMA
 from .colors import gray, green
 import inspect
 
@@ -50,7 +50,7 @@ def ai_powered(fn : Callable[P, R]) -> Callable[P, R]:
         parameters_schema = json.dumps(parameters_schema),
     ) + (SYSTEM_PROMPT_RETURN_SCHEMA.format(
         return_schema = json.dumps(return_schema),
-    ) if "function_call" not in model_features else "")
+    ) if "function_call" not in model_features else "") + SYSTEM_PROMPT_JSON_SYNTAX
 
     if DEBUG:
         print(f"{sys_prompt =}")

@@ -22,6 +22,17 @@ The json schema of arguments is as follows:
 """
 
 SYSTEM_PROMPT_RETURN_SCHEMA = """
-Your response will only contains a valid json object conforming to the following json schema, without any other words (ofcourse, you can still think step by step, but just don't say it out):
+Your response should only contains exactly one JSON with valid syntax and conforming to the following JSON Schema, without any other words (ofcourse, you can still think step by step, but just don't say it out):
 {return_schema}
+"""
+
+SYSTEM_PROMPT_JSON_SYNTAX = """
+In case you don't know about the syntax of JSON, here are some example:
+
+- number: 2
+- string: "hello"
+- list: [1, 2, 3]
+- dictionary: {"key": "value"}
+- boolean: true or false
+- null value: null
 """

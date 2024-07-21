@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-from typing import Any, Set
+import re
+from typing import Any, Callable, Set
 from ai_powered.colors import green
 from ai_powered.constants import DEBUG
 from .definitions import FunctionSimulator, ModelFeature
@@ -60,7 +61,9 @@ class GenericFunctionSimulator (FunctionSimulator):
 
             # raw_resp_str = "```json\n{"result": 2}\n```"
 
-            if raw_resp_str.startswith("```") and raw_resp_str.endswith("```"):
+            is_markdown : Callable[[str], bool]= lambda s: s.startswith("```") and s.endswith("```")
+
+            if is_markdown(raw_resp_str):
                 if raw_resp_str.startswith("```json"):
                     unwrapped_resp_str = raw_resp_str[7:-3]
                 else:
@@ -68,13 +71,21 @@ class GenericFunctionSimulator (FunctionSimulator):
             else:
                 unwrapped_resp_str = raw_resp_str
 
-            # unwrapped_result_str = "2"
+            if DEBUG:
+                print(f"{unwrapped_resp_str =}")
 
-            if unwrapped_resp_str.startswith('{"result":') and unwrapped_resp_str.endswith("}"):
+            is_result : Callable[[str], bool] = lambda s: re.match(r'^\s*\{\s*"result":' , s) is not None
+
+            # unwrapped_result_str = "2" | "{"result": 2}" | "{ "result": 2 }"
+            if is_result(unwrapped_resp_str):
                 result_str = unwrapped_resp_str
             else:
                 result_str = f'{{"result": {unwrapped_resp_str}}}'
 
             if DEBUG:
+                print(f"{raw_resp_str =}")
+                print(f"{is_markdown(raw_resp_str) =}")
+                print(f"{is_result(unwrapped_resp_str) =}")
                 print(f"{result_str =}")
+
             return result_str
