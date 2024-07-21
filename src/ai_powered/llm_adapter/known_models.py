@@ -49,6 +49,13 @@ KNOWN_PLATFORMS : list[KnownPlatform] = [
             KnownModel("deepseek-coder", set()),
         ]
     ),
+    KnownPlatform(
+        platform_name = "localhost",
+        match_platform_url = contains("localhost"),
+        known_model_list = [
+            KnownModel("lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf", set()),
+        ]
+    ),
 ]
 
 ModelConfig : TypeAlias = KnownModel
