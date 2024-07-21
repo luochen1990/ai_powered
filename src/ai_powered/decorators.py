@@ -30,18 +30,14 @@ def ai_powered(fn : Callable[P, R]) -> Callable[P, R]:
 
     params_ta : dict[str, TypeAdapter[Any]] = {param.name: TypeAdapter(param.annotation) for param in sig.parameters.values()}
     parameters_schema = {param_name: ta.json_schema() for param_name, ta in params_ta.items()}
-    return_ta = TypeAdapter(sig.return_annotation)
+    return_schema = TypeAdapter(sig.return_annotation).json_schema()
+    Result = create_model("Result", result=(sig.return_annotation,Field(...)))
+    Result_ta = TypeAdapter(Result)
 
     if DEBUG:
         for param_name, schema in parameters_schema.items():
             print(f"{param_name} (json schema): {schema}")
-
-        return_schema = return_ta.json_schema()
         print(f"return (json schema): {return_schema}")
-
-    Result = create_model("Result", result=(sig.return_annotation,Field(...)))
-    Result_ta = TypeAdapter(Result)
-    result_schema = Result_ta.json_schema()
 
     model_config = complete_model_config(OPENAI_BASE_URL, OPENAI_MODEL_NAME)
     model_name = model_config.model_name
@@ -51,17 +47,17 @@ def ai_powered(fn : Callable[P, R]) -> Callable[P, R]:
     sys_prompt = SYSTEM_PROMPT.format(
         signature = sig,
         docstring = docstring or "not provided, guess the most possible intention from the function name",
-        parameters_schema = parameters_schema,
-    ) + SYSTEM_PROMPT_RETURN_SCHEMA.format(
-        return_schema = result_schema,
-    ) if "function_call" in model_features else ""
+        parameters_schema = json.dumps(parameters_schema),
+    ) + (SYSTEM_PROMPT_RETURN_SCHEMA.format(
+        return_schema = json.dumps(return_schema),
+    ) if "function_call" not in model_features else "")
 
     if DEBUG:
         print(f"{sys_prompt =}")
-        print(f"{result_schema =}")
+        print(f"{return_schema =}")
 
     fn_simulator = GenericFunctionSimulator(
-        function_name, f"{sig}", docstring, parameters_schema, result_schema,
+        function_name, f"{sig}", docstring, parameters_schema, return_schema,
         OPENAI_BASE_URL, OPENAI_API_KEY, model_name, model_features, model_options, sys_prompt
     )
 

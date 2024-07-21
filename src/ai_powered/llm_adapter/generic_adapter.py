@@ -5,6 +5,14 @@ from ai_powered.constants import DEBUG
 from .definitions import FunctionSimulator, ModelFeature
 import openai
 
+def _return_schema_wrapper(return_schema: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "result": return_schema,
+        },
+        "required": ["result"],
+    }
 
 @dataclass(frozen=True)
 class GenericFunctionSimulator (FunctionSimulator):
@@ -19,6 +27,7 @@ class GenericFunctionSimulator (FunctionSimulator):
 
     def query_model(self, user_msg: str) -> str:
         client = openai.OpenAI(base_url=self.base_url, api_key=self.api_key, **self.model_options)
+        #return_schema_need_wrap : bool = self.return_schema["type"] != "object"
 
         response = client.chat.completions.create(
             model = self.model_name,
@@ -30,7 +39,7 @@ class GenericFunctionSimulator (FunctionSimulator):
                 "type": "function",
                 "function": {
                     "name": "return_result",
-                    "parameters": self.return_schema,
+                    "parameters": _return_schema_wrapper(self.return_schema)
                 },
             }],
             tool_choice = {"type": "function", "function": {"name": "return_result"}},
@@ -51,8 +60,11 @@ class GenericFunctionSimulator (FunctionSimulator):
 
             # raw_resp_str = "```json\n{"result": 2}\n```"
 
-            if raw_resp_str.startswith("```json\n") and raw_resp_str.endswith("\n```"):
-                unwrapped_resp_str = raw_resp_str[8:-4]
+            if raw_resp_str.startswith("```") and raw_resp_str.endswith("```"):
+                if raw_resp_str.startswith("```json"):
+                    unwrapped_resp_str = raw_resp_str[7:-3]
+                else:
+                    unwrapped_resp_str = raw_resp_str[3:-3]
             else:
                 unwrapped_resp_str = raw_resp_str
 

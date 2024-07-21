@@ -12,18 +12,16 @@ and then begin to simulate its execution,
 that is: the user will ask for the result of this function with actual arguments,
 the arguments is provided in the form of a json string,
 you need to call the return_result function to return the result to the user.
-the result you return should be a valid json string that conforms to the schema of the parameters of the function,
-and without any decoration or additional information.
 
 The function is as follows:
 {signature}
     ''' {docstring} '''
 
-The schema of arguments is as follows:
+The json schema of arguments is as follows:
 {parameters_schema}
 """
 
 SYSTEM_PROMPT_RETURN_SCHEMA = """
-The schema of expected return value is as follows:
+Your response will only contains a valid json object conforming to the following json schema, without any other words (ofcourse, you can still think step by step, but just don't say it out):
 {return_schema}
 """
