@@ -16,4 +16,4 @@ def test_calculator():
     assert calculator("1+1") == 2
     assert calculator("1+2*3") == 7
     assert calculator("2^10+3*4") == 1036
-    assert calculator("2^10+sum(1,10)") == 1079
+    assert calculator("2^10+sum_from_to(1,10)") == 1079
