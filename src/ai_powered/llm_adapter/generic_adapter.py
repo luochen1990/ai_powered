@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 import re
 from typing import Any, Callable, Set
-from ai_powered.colors import green
+from ai_powered.colors import green, yellow
 from ai_powered.constants import DEBUG
 from .definitions import FunctionSimulator, ModelFeature
 import openai
@@ -30,24 +30,31 @@ class GenericFunctionSimulator (FunctionSimulator):
         client = openai.OpenAI(base_url=self.base_url, api_key=self.api_key, **self.model_options)
         #return_schema_need_wrap : bool = self.return_schema["type"] != "object"
 
+
+        messages : Any = [
+            {"role": "system", "content": self.system_prompt},
+            {"role": "user", "content": user_msg}
+        ]
+        tools : Any = [{
+            "type": "function",
+            "function": {
+                "name": "return_result",
+                "parameters": _return_schema_wrapper(self.return_schema)
+            },
+        }]
+        if DEBUG:
+            print(yellow(f"request.messages = {messages}"))
+            print(yellow(f"request.tools = {tools}"))
+            print(green(f"[fn {self.function_name}] request prepared."))
+
         response = client.chat.completions.create(
             model = self.model_name,
-            messages = [
-                {"role": "system", "content": self.system_prompt},
-                {"role": "user", "content": user_msg}
-            ],
-            tools = [{
-                "type": "function",
-                "function": {
-                    "name": "return_result",
-                    "parameters": _return_schema_wrapper(self.return_schema)
-                },
-            }],
+            messages = messages,
+            tools = tools,
             tool_choice = {"type": "function", "function": {"name": "return_result"}},
         )
-
         if DEBUG:
-            print(f"{response =}")
+            print(yellow(f"{response =}"))
             print(green(f"[fn {self.function_name}] response received."))
 
         resp_msg = response.choices[0].message
