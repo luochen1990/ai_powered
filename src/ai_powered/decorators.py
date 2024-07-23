@@ -1,7 +1,7 @@
 from functools import wraps
-from typing import Any, Callable, ParamSpec, TypeVar
+from typing import Any, Callable, Generic, ParamSpec, TypeVar
 import json
-from pydantic import Field, TypeAdapter, create_model
+import msgspec
 
 from ai_powered.llm_adapter.definitions import ModelFeature
 from ai_powered.llm_adapter.generic_adapter import GenericFunctionSimulator
@@ -9,6 +9,10 @@ from ai_powered.llm_adapter.known_models import complete_model_config
 from .constants import DEBUG, OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL_NAME, SYSTEM_PROMPT, SYSTEM_PROMPT_JSON_SYNTAX, SYSTEM_PROMPT_RETURN_SCHEMA
 from .colors import gray, green
 import inspect
+
+A = TypeVar("A")
+class Result (msgspec.Struct, Generic[A]):
+    result: A
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -28,11 +32,10 @@ def ai_powered(fn : Callable[P, R]) -> Callable[P, R]:
 
         print(f"{sig.return_annotation =}")
 
-    params_ta : dict[str, TypeAdapter[Any]] = {param.name: TypeAdapter(param.annotation) for param in sig.parameters.values()}
-    parameters_schema = {param_name: ta.json_schema() for param_name, ta in params_ta.items()}
-    return_schema = TypeAdapter(sig.return_annotation).json_schema()
-    Result = create_model("Result", result=(sig.return_annotation,Field(...)))
-    Result_ta = TypeAdapter(Result)
+    parameters_schema = {param.name: msgspec.json.schema(param.annotation) for param in sig.parameters.values()}
+    return_type = sig.return_annotation
+    return_schema = msgspec.json.schema(return_type)
+    result_type = Result[return_type]
 
     if DEBUG:
         for param_name, schema in parameters_schema.items():
@@ -46,11 +49,11 @@ def ai_powered(fn : Callable[P, R]) -> Callable[P, R]:
 
     sys_prompt = SYSTEM_PROMPT.format(
         signature = sig,
-        docstring = docstring or "not provided, guess the most possible intention from the function name",
+        docstring = docstring or "no doc, guess intention from function name",
         parameters_schema = json.dumps(parameters_schema),
-    ) + (SYSTEM_PROMPT_RETURN_SCHEMA.format(
+    ) + ("" if "function_call" in model_features else SYSTEM_PROMPT_RETURN_SCHEMA.format(
         return_schema = json.dumps(return_schema),
-    ) if "function_call" not in model_features else "") + SYSTEM_PROMPT_JSON_SYNTAX
+    ) + SYSTEM_PROMPT_JSON_SYNTAX )
 
     if DEBUG:
         print(f"{sys_prompt =}")
@@ -68,17 +71,20 @@ def ai_powered(fn : Callable[P, R]) -> Callable[P, R]:
     @wraps(fn)
     def wrapper_fn(*args: P.args, **kwargs: P.kwargs) -> R:
         real_arg = sig.bind(*args, **kwargs)
-        real_arg_str = json.dumps(real_arg.arguments)
+        real_arg_str = msgspec.json.encode(real_arg.arguments).decode('utf-8')
 
         if DEBUG:
             print(f"{real_arg_str =}")
-            print(green(f"[fn {function_name}] request prepared."))
 
         resp_str = fn_simulator.query_model(real_arg_str)
-        print(green(f"[fn {function_name}] response extracted."))
+        if DEBUG:
+            print(f"{resp_str =}")
+            print(green(f"[fn {function_name}] response extracted."))
 
-        returned_result = Result_ta.validate_json(resp_str)
-        print(green(f"[fn {function_name}] response validated."))
+        returned_result = msgspec.json.decode(resp_str, type=result_type)
+        if DEBUG:
+            print(f"{returned_result =}")
+            print(green(f"[fn {function_name}] response validated."))
 
         return returned_result.result #type: ignore
 
