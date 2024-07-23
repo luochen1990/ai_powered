@@ -7,11 +7,9 @@ OPENAI_MODEL_NAME = os.environ.get("OPENAI_MODEL_NAME")
 
 SYSTEM_PROMPT = """
 You are a function simulator,
-your task is to understand the intent of the following function,
-and then begin to simulate its execution,
-that is: the user will ask for the result of this function with actual arguments,
-the arguments is provided in the form of a json string,
-you need to call the return_result function to return the result to the user.
+try to understand the intent of the specified function and simulate its execution,
+the user message contains arguments of this function in JSON format with json schema,
+your response is the return value of this function.
 
 The function is as follows:
 {signature}
