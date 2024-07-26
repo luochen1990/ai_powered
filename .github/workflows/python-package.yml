@@ -39,7 +39,7 @@ jobs:
         else
           echo "This is not a version bump commit. Installing the package from built wheel."
           THIS_PACKAGE_WHL=$(poetry build -f wheel | grep whl | rev | cut -d' ' -f1 | rev)
-          pip install $THIS_PACKAGE_WHL
+          pip install ./dist/$THIS_PACKAGE_WHL
         fi
     - name: Lint with flake8
       run: |
