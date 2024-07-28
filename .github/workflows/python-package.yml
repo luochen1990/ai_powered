@@ -38,7 +38,7 @@ jobs:
           echo "This is not a version bump commit. Installing the package from source code."
           pip install -e .
         fi
-    - name: Test with pytest with coverage
+    - name: Test with coverage
       env:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       run: |
@@ -48,6 +48,7 @@ jobs:
         else
           echo "This is not a version bump commit, run test with coverage."
           pytest -n0 -s --cov=src --cov-report=term --cov-report=xml
+        fi
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
       with:
