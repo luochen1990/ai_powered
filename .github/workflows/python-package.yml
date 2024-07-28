@@ -43,6 +43,12 @@ jobs:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       run: |
         pytest -s --cov=src
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        flags: unittests
+        verbose: true
     - name: Type checking with pyright
       run: |
         pyright
