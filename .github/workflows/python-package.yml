@@ -47,6 +47,7 @@ jobs:
           pytest -n0 -s
         else
           echo "This is not a version bump commit, run test with coverage."
+          export DEBUG=true
           pytest -n0 -s --cov=src --cov-report=term --cov-report=xml
         fi
     - name: Upload coverage to Codecov
