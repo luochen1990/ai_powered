@@ -31,18 +31,23 @@ jobs:
     - name: Install The Tested Package
       run: |
         if [[ "${{ github.event.head_commit.message }}" == "version:"* ]]; then
-          echo "This is a version bump commit. Installing the package from pypi."
-          pip install ai_powered@latest
-        else
-          echo "This is not a version bump commit. Installing the package from built wheel."
+          echo "This is a version bump commit. Installing the package from built wheel."
           THIS_PACKAGE_WHL=$(poetry build -f wheel | grep whl | rev | cut -d' ' -f1 | rev)
           pip install ./dist/$THIS_PACKAGE_WHL
+        else
+          echo "This is not a version bump commit. Installing the package from source code."
+          pip install -e .
         fi
     - name: Test with pytest with coverage
       env:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       run: |
-        pytest -n0 -s --cov=src --cov-report=term --cov-report=xml
+        if [[ "${{ github.event.head_commit.message }}" == "version:"* ]]; then
+          echo "This is a version bump commit, run test without coverage."
+          pytest -n0 -s
+        else
+          echo "This is not a version bump commit, run test with coverage."
+          pytest -n0 -s --cov=src --cov-report=term --cov-report=xml
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
       with:
