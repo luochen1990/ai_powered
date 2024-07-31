@@ -56,6 +56,7 @@ KNOWN_PLATFORMS : list[KnownPlatform] = [
         known_model_list = [
             KnownModel("gorilla-llm/gorilla-openfunctions-v2-gguf/gorilla-openfunctions-v2-q4_K_M.gguf", ALL_FEATURES),
             KnownModel("lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf", set()),
+            KnownModel("deepseek-coder-v2", set()),
         ]
     ),
 ]

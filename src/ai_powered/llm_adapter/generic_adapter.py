@@ -50,8 +50,8 @@ class GenericFunctionSimulator (FunctionSimulator):
         response = client.chat.completions.create(
             model = self.model_name,
             messages = messages,
-            tools = tools,
-            tool_choice = {"type": "function", "function": {"name": "return_result"}},
+            tools = tools if "function_call" in self.model_features else openai.NOT_GIVEN,
+            tool_choice = {"type": "function", "function": {"name": "return_result"}} if "function_call" in self.model_features else openai.NOT_GIVEN,
         )
         if DEBUG:
             print(yellow(f"{response =}"))
@@ -66,17 +66,18 @@ class GenericFunctionSimulator (FunctionSimulator):
             raw_resp_str = resp_msg.content
             assert raw_resp_str is not None
 
+            raw_resp_str_strip = raw_resp_str.strip()
             # raw_resp_str = "```json\n{"result": 2}\n```"
 
             is_markdown : Callable[[str], bool]= lambda s: s.startswith("```") and s.endswith("```")
 
-            if is_markdown(raw_resp_str):
-                if raw_resp_str.startswith("```json"):
-                    unwrapped_resp_str = raw_resp_str[7:-3]
+            if is_markdown(raw_resp_str_strip):
+                if raw_resp_str_strip.startswith("```json"):
+                    unwrapped_resp_str = raw_resp_str_strip[7:-3]
                 else:
-                    unwrapped_resp_str = raw_resp_str[3:-3]
+                    unwrapped_resp_str = raw_resp_str_strip[3:-3]
             else:
-                unwrapped_resp_str = raw_resp_str
+                unwrapped_resp_str = raw_resp_str_strip
 
             if DEBUG:
                 print(f"{unwrapped_resp_str =}")
@@ -91,7 +92,7 @@ class GenericFunctionSimulator (FunctionSimulator):
 
             if DEBUG:
                 print(f"{raw_resp_str =}")
-                print(f"{is_markdown(raw_resp_str) =}")
+                print(f"{is_markdown(raw_resp_str_strip) =}")
                 print(f"{is_result(unwrapped_resp_str) =}")
                 print(f"{result_str =}")
 
