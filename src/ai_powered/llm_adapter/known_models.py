@@ -74,9 +74,8 @@ def complete_model_config(platform_url: str, model_name: Optional[str]) -> Model
                 return platform.known_model_list[0] #known platform, but model not specified
 
             #known platform, but unknown model_name specified
-            cfg = deepcopy(platform.known_model_list[0])
-            cfg.model_name = model_name
-            return cfg
+            default_options = deepcopy(platform.known_model_list[0].suggested_options)
+            return ModelConfig(model_name, ALL_FEATURES, default_options)
 
     #unknown platform
     if model_name is not None:
