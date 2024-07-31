@@ -11,17 +11,16 @@
     eachSystem = f: nixpkgs.lib.genAttrs supportedSystems (system: f rec {
       inherit system;
       pkgs = import nixpkgs { inherit system; };
-      python3 = pkgs.python3; # use pkgs.python3.withPackages (p: []) if you need more python packages in nixpkgs
-      py-version = pkgs.python3.version;
+      python = pkgs.python3; # use pkgs.python3.withPackages (p: []) if you need more python packages in nixpkgs
     });
   in
   {
-    devShells = eachSystem ({pkgs, python3, ...}: rec {
+    devShells = eachSystem ({pkgs, python, ...}: rec {
       default = poetry;
 
       poetry = pkgs.mkShell {
         buildInputs = [
-          python3
+          python
           pkgs.poetry
         ];
 
