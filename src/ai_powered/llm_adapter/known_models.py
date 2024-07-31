@@ -1,3 +1,4 @@
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional, Set, TypeAlias
 
@@ -45,8 +46,8 @@ KNOWN_PLATFORMS : list[KnownPlatform] = [
         platform_name = "deepseek",
         match_platform_url = contains("deepseek"),
         known_model_list = [
-            KnownModel("deepseek-chat", {"function_call", "response_json"}),
             KnownModel("deepseek-coder", {"function_call", "response_json"}),
+            KnownModel("deepseek-chat", {"function_call", "response_json"}),
         ]
     ),
     KnownPlatform(
@@ -71,7 +72,12 @@ def complete_model_config(platform_url: str, model_name: Optional[str]) -> Model
                         return known_model
             else:
                 return platform.known_model_list[0] #known platform, but model not specified
-            return platform.known_model_list[0] #known platform, but unknown model specified
+
+            #known platform, but unknown model_name specified
+            cfg = deepcopy(platform.known_model_list[0])
+            cfg.model_name = model_name
+            return cfg
+
     #unknown platform
     if model_name is not None:
         return ModelConfig(model_name, ALL_FEATURES)
