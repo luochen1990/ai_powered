@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 import re
-from typing import Any, Callable, Set
+from typing_extensions import Any, Callable, Set
 from ai_powered.colors import green, yellow
 from ai_powered.constants import DEBUG
 from .definitions import FunctionSimulator, ModelFeature

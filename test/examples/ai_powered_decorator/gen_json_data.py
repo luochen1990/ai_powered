@@ -1,4 +1,4 @@
-from typing import Any
+from typing_extensions import Any
 from ai_powered import ai_powered
 
 @ai_powered

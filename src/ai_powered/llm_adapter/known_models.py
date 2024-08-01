@@ -1,6 +1,6 @@
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Any, Callable, Optional, Set, TypeAlias
+from typing_extensions import Any, Callable, Optional, Set, TypeAlias
 
 from ai_powered.llm_adapter.definitions import ALL_FEATURES, ModelFeature
 
