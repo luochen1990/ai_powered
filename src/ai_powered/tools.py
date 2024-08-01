@@ -1,66 +1,92 @@
 import inspect
-from typing import Any, Callable, Literal, ParamSpec, Required, TypeVar, TypedDict
+from typing import Callable, Dict, Generic, Literal, ParamSpec, Required, TypeVar, TypedDict
 import msgspec
-import openai
 
+from ai_powered.colors import yellow
 from ai_powered.constants import DEBUG
+from ai_powered.llm_adapter.openai.param_types import ChatCompletionFunctionMessageParam, ChatCompletionToolMessageParam
+from ai_powered.llm_adapter.openai.types import ChatCompletionMessageToolCall
+from ai_powered.schema_deref import deref
+
+FunctionParameters = Dict[str, object]
+
+class FunctionDefinition(TypedDict, total=False):
+    name: Required[str] #identifier, max length 64
+    description: str
+    parameters: FunctionParameters
 
 class ChatCompletionToolParam(TypedDict):
-    function: openai.types.FunctionDefinition
-    type: str
-
-P = ParamSpec("P")
-R = TypeVar("R")
-
-def schema_of_parameters_as_object(sig : inspect.Signature) -> dict[str, Any]:
-    # TODO: support context references (need support by OpenAI API)
-    # schema_list, ctxt = msgspec.json.schema_components([param.annotation for param in sig.parameters.values()])
-    # properties = {param.name: sch for sch, param in zip(schema_list, sig.parameters.values())}
-    properties = {param.name: msgspec.json.schema(param.annotation) for param in sig.parameters.values()}
-    return {
-        "type": "object",
-        "properties": properties,
-        "required": ["result"],
-    }
-
-def tool_schema(fn : Callable[P, R]) -> ChatCompletionToolParam:
-
-    function_name = fn.__name__
-    sig = inspect.signature(fn)
-    docstring = inspect.getdoc(fn)
-
-    if DEBUG:
-        print(f"{sig =}")
-        print(f"{docstring =}")
-
-        for param in sig.parameters.values():
-            print(f"{param.name}: {param.annotation}")
-
-        print(f"{sig.return_annotation =}")
-
-    parameters_schema = schema_of_parameters_as_object(sig)
-
-    return {
-        "type": "function",
-        "function": openai.types.FunctionDefinition(
-            name= function_name,
-            description= docstring or "",
-            parameters= parameters_schema,
-        ),
-    }
+    function: Required[FunctionDefinition]
+    type: Required[Literal["function"]]
 
 class Function(TypedDict):
     name: Required[str]
-
 class ChatCompletionNamedToolChoiceParam(TypedDict):
     type: Required[Literal["function"]]
     function: Required[Function]
 
-def tool_choice(fn : Callable[P, R]) -> ChatCompletionNamedToolChoiceParam:
-    function_name = fn.__name__
-    return {
-        "type": "function",
-        "function": {
-            "name": function_name
+P = ParamSpec("P")
+R = TypeVar("R")
+
+class MakeTool(msgspec.Struct, Generic[P, R]):
+    fn : Callable[P, R]
+
+    def struct_of_parameters(self) -> type[msgspec.Struct]:
+        ''' 函数参数所对应的传输对象 '''
+        sig = inspect.signature(self.fn)
+        properties = [(param.name, param.annotation) for param in sig.parameters.values()]
+        ArgObj = msgspec.defstruct("ArgObj", properties)
+        return ArgObj
+
+    def schema(self) -> ChatCompletionToolParam:
+        function_name = self.fn.__name__
+        sig = inspect.signature(self.fn)
+        docstring = inspect.getdoc(self.fn)
+
+        if DEBUG:
+            print(f"{sig =}")
+            print(f"{docstring =}")
+
+            for param in sig.parameters.values():
+                print(f"{param.name}: {param.annotation}")
+
+            print(f"{sig.return_annotation =}")
+
+        raw_schema = msgspec.json.schema(self.struct_of_parameters())
+        parameters_schema = deref(raw_schema)
+        print(yellow(f"{parameters_schema =}"))
+
+        return {
+            "type": "function",
+            "function": {
+                "name": function_name,
+                "description": docstring or "",
+                "parameters": parameters_schema,
+            }
         }
-    }
+
+    def call(self, tool_call: ChatCompletionMessageToolCall) -> ChatCompletionToolMessageParam:
+        assert self.fn.__name__ == tool_call.function.name
+        sig = inspect.signature(self.fn)
+        args_json : str = tool_call.function.arguments
+        args_dict = msgspec.json.decode(args_json)
+
+        args = sig.bind(**args_dict).args
+
+        function_response = self.fn(*args) #type: ignore
+
+        # 构建函数结果消息对象
+        return {
+            "role": "tool",
+            "tool_call_id": tool_call.id,
+            "content": msgspec.json.encode(function_response).decode('utf-8')
+        }
+
+    def choice(self) -> ChatCompletionNamedToolChoiceParam:
+        function_name = self.fn.__name__
+        return {
+            "type": "function",
+            "function": {
+                "name": function_name
+            }
+        }
