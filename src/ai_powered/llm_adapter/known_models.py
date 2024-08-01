@@ -46,8 +46,8 @@ KNOWN_PLATFORMS : list[KnownPlatform] = [
         platform_name = "deepseek",
         match_platform_url = contains("deepseek"),
         known_model_list = [
-            KnownModel("deepseek-coder", {"function_call", "response_json"}),
             KnownModel("deepseek-chat", {"function_call", "response_json"}),
+            KnownModel("deepseek-coder", {"function_call", "response_json"}),
         ]
     ),
     KnownPlatform(
