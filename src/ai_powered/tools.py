@@ -1,5 +1,5 @@
 import inspect
-from typing import Any, Callable, ParamSpec, TypeVar, TypedDict
+from typing import Any, Callable, Literal, ParamSpec, Required, TypeVar, TypedDict
 import msgspec
 import openai
 
@@ -47,4 +47,20 @@ def tool_schema(fn : Callable[P, R]) -> ChatCompletionToolParam:
             description= docstring or "",
             parameters= parameters_schema,
         ),
+    }
+
+class Function(TypedDict):
+    name: Required[str]
+
+class ChatCompletionNamedToolChoiceParam(TypedDict):
+    type: Required[Literal["function"]]
+    function: Required[Function]
+
+def tool_choice(fn : Callable[P, R]) -> ChatCompletionNamedToolChoiceParam:
+    function_name = fn.__name__
+    return {
+        "type": "function",
+        "function": {
+            "name": function_name
+        }
     }
