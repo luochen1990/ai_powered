@@ -51,7 +51,7 @@ jobs:
         fi
 
         export DEBUG=$RUNNER_DEBUG
-        if [ -n "$DEBUG" ]; then
+        if [ -n "$DEBUG" || -n "$COV_ARG" ]; then
           DBG_ARG="-n0 -s"
         else
           DBG_ARG=""
