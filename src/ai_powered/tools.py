@@ -1,5 +1,6 @@
 import inspect
-from typing_extensions import Callable, Dict, Generic, Literal, ParamSpec, Required, TypeVar, TypedDict
+from typing import Callable, Dict, Generic
+from typing_extensions import Literal, ParamSpec, Required, TypeVar, TypedDict
 import msgspec
 
 from ai_powered.colors import yellow

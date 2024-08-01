@@ -1,5 +1,6 @@
 from functools import wraps
-from typing_extensions import Any, Callable, Generic, ParamSpec, TypeVar
+from typing import Any, Callable, Generic
+from typing_extensions import ParamSpec, TypeVar
 import json
 import msgspec
 

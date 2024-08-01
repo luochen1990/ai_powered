@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing_extensions import Optional
+from typing import Optional
 from ai_powered import ai_powered
 
 @ai_powered

@@ -1,5 +1,5 @@
-
-from typing_extensions import Iterable, Literal, Optional, Required, TypedDict, Union
+from typing import Literal, Optional, Iterable, Union
+from typing_extensions import TypedDict, Required
 
 class ChatCompletionSystemMessageParam(TypedDict, total=False):
     content: Required[str]
