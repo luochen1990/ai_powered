@@ -1,10 +1,10 @@
+from typing import Any, Callable, Set
 from dataclasses import dataclass
 import re
-from typing import Any, Callable, Set
+import openai
 from ai_powered.colors import green, yellow
 from ai_powered.constants import DEBUG
-from .definitions import FunctionSimulator, ModelFeature
-import openai
+from ai_powered.llm_adapter.definitions import FunctionSimulator, ModelFeature
 
 def _return_schema_wrapper(return_schema: dict[str, Any]) -> dict[str, Any]:
     return {
