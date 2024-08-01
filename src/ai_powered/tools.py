@@ -1,10 +1,10 @@
 import inspect
-from typing import Callable, Dict, Generic, Literal, ParamSpec, Required, TypeVar, TypedDict
+from typing_extensions import Callable, Dict, Generic, Literal, ParamSpec, Required, TypeVar, TypedDict
 import msgspec
 
 from ai_powered.colors import yellow
 from ai_powered.constants import DEBUG
-from ai_powered.llm_adapter.openai.param_types import ChatCompletionFunctionMessageParam, ChatCompletionToolMessageParam
+from ai_powered.llm_adapter.openai.param_types import ChatCompletionToolMessageParam
 from ai_powered.llm_adapter.openai.types import ChatCompletionMessageToolCall
 from ai_powered.schema_deref import deref
 
