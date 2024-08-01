@@ -35,7 +35,7 @@
         type = "app";
         program = "${pkgs.writeShellScript "funix-app" ''
           source ${self.devShells.${system}.default.shellHook}
-          funix ./src
+          funix .
         ''}";
       };
     });
