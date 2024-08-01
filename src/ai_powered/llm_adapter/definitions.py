@@ -1,6 +1,6 @@
 from abc import ABC
 from dataclasses import dataclass
-from typing import Any, Literal, Optional
+from typing_extensions import Any, Literal, Optional
 
 '''
     信息确定的过程:
