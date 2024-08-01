@@ -6,6 +6,7 @@ import msgspec
 from ai_powered.llm_adapter.definitions import ModelFeature
 from ai_powered.llm_adapter.generic_adapter import GenericFunctionSimulator
 from ai_powered.llm_adapter.known_models import complete_model_config
+from ai_powered.schema_deref import deref
 from .constants import DEBUG, OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL_NAME, SYSTEM_PROMPT, SYSTEM_PROMPT_JSON_SYNTAX, SYSTEM_PROMPT_RETURN_SCHEMA
 from .colors import gray, green
 import inspect
@@ -34,7 +35,8 @@ def ai_powered(fn : Callable[P, R]) -> Callable[P, R]:
 
     parameters_schema = {param.name: msgspec.json.schema(param.annotation) for param in sig.parameters.values()}
     return_type = sig.return_annotation
-    return_schema = msgspec.json.schema(return_type)
+    raw_return_schema = msgspec.json.schema(return_type)
+    return_schema = deref(raw_return_schema)
     result_type = Result[return_type]
 
     if DEBUG:
