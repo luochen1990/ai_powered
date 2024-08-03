@@ -6,13 +6,14 @@ from ai_powered.constants import DEBUG, OPENAI_BASE_URL, OPENAI_MODEL_NAME
 from ai_powered.llm_adapter.known_models import complete_model_config
 from ai_powered.llm_adapter.openai.param_types import ChatCompletionMessageParam
 from ai_powered.tools import MakeTool
+from ai_powered.utils.safe_eval import safe_eval
 
 model_config = complete_model_config(OPENAI_BASE_URL, OPENAI_MODEL_NAME)
 
 def calculator(python_expression: str) -> str:
     ''' calculate the result of the math expression in python syntax and built-in functions '''
     print(f"{python_expression =}")
-    calc_result = eval(python_expression)
+    calc_result = safe_eval(python_expression)
     print(f"{calc_result =}")
     rst = f"{calc_result}"
     return rst
@@ -20,7 +21,7 @@ def calculator(python_expression: str) -> str:
 calculator_tool = MakeTool(calculator)
 
 sys_prompt = '''
-请回答用户的问题,如果其中包含需要计算的数学表达式,你可以尽量利用工具中的计算器来计算,它支持计算复杂的Python表达式,使用它时你需要将用户输入的数学表达式转换成合法的python表达式,注意不要使用任何未定义的函数,如果用户表达式中有类似函数调用的表达,请转换为python内置函数或语法
+Please answer the user's questions. If any calculations are required, use the calculator available in the tool. It supports complex Python expressions. When using it, make sure to convert the user's mathematical expression to a valid Python expression. Do not use any undefined functions; if the user's expression includes function calls, convert them to Python's built-in functions or syntax.
 '''
 
 client = openai.OpenAI(**model_config.suggested_options)
