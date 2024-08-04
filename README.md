@@ -35,9 +35,9 @@ You can also use more complex data structures in parameters and return values, b
 ```python
 @dataclass
 class UserInfo:
-name: str
-country: Optional[str]
-age: Optional[int]
+    name: str
+    country: Optional[str]
+    age: Optional[int]
 
 @ai_powered
 def extract_user_info(raw_text: str) -> UserInfo:
