@@ -32,8 +32,11 @@ R = TypeVar("R")
 class MakeTool(msgspec.Struct, Generic[P, R]):
     fn : Callable[P, R]
 
+    def __call__(self, *args: P.args, **kwds: P.kwargs) -> R:
+        return self.fn(*args, **kwds)
+
     def struct_of_parameters(self) -> type[msgspec.Struct]:
-        ''' 函数参数所对应的传输对象 '''
+        ''' Transmission object corresponding to function parameters '''
         sig = inspect.signature(self.fn)
         properties = [(param.name, param.annotation) for param in sig.parameters.values()]
         ArgObj = msgspec.defstruct("ArgObj", properties)
@@ -91,3 +94,7 @@ class MakeTool(msgspec.Struct, Generic[P, R]):
                 "name": function_name
             }
         }
+
+def make_tool(fn: Callable[P, R]) -> MakeTool[P, R]:
+    ''' Create a tool available for AI from a function '''
+    return MakeTool(fn)
