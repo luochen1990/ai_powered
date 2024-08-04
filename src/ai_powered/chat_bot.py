@@ -32,7 +32,7 @@ class ChatBot:
         response = self.client.chat.completions.create(
             model = model_config.model_name,
             messages = self.conversation,
-            tools = [ t.schema() for t in self.tools ],
+            tools = [ t.schema() for t in self.tools ] if len(self.tools) > 0 else openai.NOT_GIVEN,
         )
         assistant_message = response.choices[0].message
 
