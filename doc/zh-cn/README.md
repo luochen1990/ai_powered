@@ -46,6 +46,8 @@ def extract_user_info(raw_text: str) -> UserInfo:
     '''
 ```
 
+更多例子参见 [这里](/test/examples/ai_powered_decorator/)
+
 ### `@make_tool` 装饰器
 
 这个装饰器将普通Python函数转换为 LLM 的 [function calling](https://platform.openai.com/docs/guides/function-calling) 功能可以使用的 tool
@@ -85,6 +87,8 @@ if __name__ == "__main__":
     print(bot.chat('and what is above result divided by 2?'))
     print(f"{bot.conversation =}")
 ```
+
+更多例子参见 [这里](/test/examples/chat_bot/)
 
 当前限制和未来规划
 ---------------
