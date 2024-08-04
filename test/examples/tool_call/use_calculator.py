@@ -5,7 +5,7 @@ from ai_powered.colors import gray, green
 from ai_powered.constants import DEBUG, OPENAI_BASE_URL, OPENAI_MODEL_NAME
 from ai_powered.llm_adapter.known_models import complete_model_config
 from ai_powered.llm_adapter.openai.param_types import ChatCompletionMessageParam
-from ai_powered.tools import MakeTool
+from ai_powered.tool_call import MakeTool
 from ai_powered.utils.safe_eval import safe_eval
 
 model_config = complete_model_config(OPENAI_BASE_URL, OPENAI_MODEL_NAME)
