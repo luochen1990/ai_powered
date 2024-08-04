@@ -20,6 +20,7 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 def ai_powered(fn : Callable[P, R]) -> Callable[P, R]:
+    ''' Provide an AI powered implementation of a function '''
 
     function_name = fn.__name__
     sig = inspect.signature(fn)

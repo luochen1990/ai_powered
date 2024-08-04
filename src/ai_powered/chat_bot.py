@@ -13,13 +13,16 @@ model_config = complete_model_config(OPENAI_BASE_URL, OPENAI_MODEL_NAME)
 
 @dataclass
 class ChatBot:
+    ''' A baseclass to define chatbot which can use tools '''
+
     system_prompt : ClassVar[str] = "" # if not empty, it will prepend to the conversation
     tools: ClassVar[tuple[MakeTool[..., Any], ...]] = ()
     client: ClassVar[openai.OpenAI] = default_client
     conversation : list[ChatCompletionMessageParam] = field(default_factory=lambda:[])
 
     def __post_init__(self):
-        self.conversation.append({"role": "system", "content": self.system_prompt})
+        if len(self.system_prompt) > 0:
+            self.conversation.append({"role": "system", "content": self.system_prompt})
         self._tool_dict = {tool.fn.__name__: tool for tool in self.tools}
 
     def chat_continue(self) -> str:
