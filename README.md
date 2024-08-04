@@ -22,7 +22,6 @@ It provides the following tools:
 This decorator imbues your function signature with an AI implementation, which reads the docstring and invokes LLM to obtain the function's return value
 
 ```python
-Translated Text:
 from ai_powered import ai_powered
 
 @ai_powered
