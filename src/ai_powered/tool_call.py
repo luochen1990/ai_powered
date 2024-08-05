@@ -58,7 +58,9 @@ class MakeTool(msgspec.Struct, Generic[P, R]):
 
         raw_schema = msgspec.json.schema(self.struct_of_parameters())
         parameters_schema = deref(raw_schema)
-        print(yellow(f"{parameters_schema =}"))
+
+        if DEBUG:
+            print(yellow(f"{parameters_schema =}"))
 
         return {
             "type": "function",
