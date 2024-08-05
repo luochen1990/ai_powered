@@ -48,19 +48,13 @@ class MakeTool(msgspec.Struct, Generic[P, R]):
         docstring = inspect.getdoc(self.fn)
 
         if DEBUG:
-            print(f"{sig =}")
-            print(f"{docstring =}")
-
-            for param in sig.parameters.values():
-                print(f"{param.name}: {param.annotation}")
-
-            print(f"{sig.return_annotation =}")
+            print(f"[MakeTool.schema()] {sig =}")
 
         raw_schema = msgspec.json.schema(self.struct_of_parameters())
         parameters_schema = deref(raw_schema)
 
         if DEBUG:
-            print(yellow(f"{parameters_schema =}"))
+            print(yellow(f"[MakeTool.schema()] {parameters_schema =}"))
 
         return {
             "type": "function",
