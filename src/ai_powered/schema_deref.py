@@ -16,6 +16,8 @@ def deref(schema: dict[str, Any]) -> dict[str, Any]:
     }
     '''
 
+    #TODO: 环状引用检测（递归类型，如 Nat，List）
+
     defs = schema.get("$defs", {})
 
     def _deref(schema: dict[str, Any]) -> dict[str, Any]:
