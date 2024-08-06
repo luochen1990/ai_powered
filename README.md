@@ -99,6 +99,6 @@ Regarding Code Contribution
 --------------------------
 
 1. The project will always be open source, but I haven't decided which open-source license to use yet. If you don't mind this, you can directly PR; otherwise, we might need to discuss the license issue first.
-2. Currently, all code is under strict mode type checking, and any type errors will be blocked by GitHub Actions. We do not recommend using `Any` or `#type: ignore` unless absolutely necessary.
+2. Currently, all code is under Pyright strict mode type checking, and any type errors will be blocked by GitHub Actions. We do not recommend using `Any` or `#type: ignore` unless absolutely necessary.
 3. Test coverage will be continuously monitored. It is recommended to always provide tests for your code, and even prepare the tests before coding.
 4. Regarding the development environment, it is recommended to install `nix` and `direnv` so that you automatically get a usable development environment. Of course, `poetry shell` is also a good choice (if you are already using poetry).
