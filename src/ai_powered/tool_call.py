@@ -3,7 +3,7 @@ from typing import Callable, Dict, Generic
 from typing_extensions import Literal, ParamSpec, Required, TypeVar, TypedDict
 import msgspec
 
-from ai_powered.colors import yellow
+from ai_powered.colors import gray, green
 from ai_powered.constants import DEBUG
 from ai_powered.llm_adapter.openai.param_types import ChatCompletionToolMessageParam
 from ai_powered.llm_adapter.openai.types import ChatCompletionMessageToolCall
@@ -48,13 +48,13 @@ class MakeTool(msgspec.Struct, Generic[P, R]):
         docstring = inspect.getdoc(self.fn)
 
         if DEBUG:
-            print(f"[MakeTool.schema()] {sig =}")
+            print(gray(f"[MakeTool.schema()] {sig =}"))
 
         raw_schema = msgspec.json.schema(self.struct_of_parameters())
         parameters_schema = deref(raw_schema)
 
         if DEBUG:
-            print(yellow(f"[MakeTool.schema()] {parameters_schema =}"))
+            print(gray(f"[MakeTool.schema()] {parameters_schema =}"))
 
         return {
             "type": "function",
@@ -66,10 +66,18 @@ class MakeTool(msgspec.Struct, Generic[P, R]):
         }
 
     def call(self, tool_call: ChatCompletionMessageToolCall) -> ChatCompletionToolMessageParam:
+        if DEBUG:
+            print(green(f"[MakeTool.call()] {tool_call =}"))
+
         assert self.fn.__name__ == tool_call.function.name
+
         sig = inspect.signature(self.fn)
         args_json : str = tool_call.function.arguments
-        args_dict = msgspec.json.decode(args_json)
+        args_obj = msgspec.json.decode(args_json, type=self.struct_of_parameters())
+        args_dict = msgspec.structs.asdict(args_obj)
+
+        if DEBUG:
+            print(gray(f"[MakeTool.call()] {args_dict =}"))
 
         args = sig.bind(**args_dict).args
 
