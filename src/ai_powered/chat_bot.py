@@ -21,8 +21,7 @@ class ChatBot:
     conversation : list[ChatCompletionMessageParam] = field(default_factory=lambda:[])
 
     def __post_init__(self):
-        if len(self.system_prompt) > 0:
-            self.conversation.append({"role": "system", "content": self.system_prompt})
+        self._system_prompt : list[ChatCompletionMessageParam] = [{"role": "system", "content": s} for s in [self.system_prompt] if len(s) > 0]
         self._tool_dict = {tool.fn.__name__: tool for tool in self.tools}
         self._tool_schemas : list[ChatCompletionToolParam] | openai.NotGiven = [ t.schema() for t in self.tools ] if len(self.tools) > 0 else openai.NOT_GIVEN
 
@@ -32,7 +31,7 @@ class ChatBot:
 
         response = self.client.chat.completions.create(
             model = model_config.model_name,
-            messages = self.conversation,
+            messages = [*self._system_prompt, *self.conversation],
             tools = self._tool_schemas,
         )
         assistant_message = response.choices[0].message
