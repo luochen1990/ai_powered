@@ -15,8 +15,17 @@ def deref(schema: dict[str, Any]) -> dict[str, Any]:
         "required": [param.name for param in sig.parameters.values() if param.default == inspect.Parameter.empty],
     }
     '''
-    if '$ref' and '$defs' in schema:
-        ref_name = schema["$ref"].split('/')[-1]
-        return schema["$defs"][ref_name]
-    else:
-        return schema
+
+    defs = schema.get("$defs", {})
+
+    def _deref(schema: dict[str, Any]) -> dict[str, Any]:
+        if '$ref' in schema:
+            ref_name = schema["$ref"].split('/')[-1]
+            return _deref(defs[ref_name])
+        elif 'properties' in schema:
+            properties = {key: _deref(value) for key, value in schema['properties'].items()}
+            return schema | {"properties": properties}
+        else:
+            return schema
+
+    return _deref(schema)
