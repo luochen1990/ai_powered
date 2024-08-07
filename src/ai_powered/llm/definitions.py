@@ -16,15 +16,18 @@ class ModelFeature (enum.Enum):
     '''
     Ollama Doc: https://ollama.fan/reference/openai/#supported-features
     OpenAI Doc:
-    - tools: https://platform.openai.com/docs/guides/function-calling
-    - response_format: https://platform.openai.com/docs/guides/structured-outputs
-    - seed: https://platform.openai.com/docs/advanced-usage/reproducible-outputs
+    - tools/function_calling: https://platform.openai.com/docs/guides/function-calling
+    - structured_outputs/strict_mode: https://platform.openai.com/docs/guides/structured-outputs
+    - seed/reproducible_outputs: https://platform.openai.com/docs/advanced-usage/reproducible-outputs
     '''
-    tools = "tools"
-    response_format = "response_format"
-    seed = "seed"
+    tools = "function_calling"
+    function_calling = "function_calling"
+    seed = "reproducible_outputs"
+    reproducible_outputs = "reproducible_outputs"
+    structured_outputs = "structured_outputs"
+    strict_mode = "strict_mode"
 
-ALL_FEATURES : set[ModelFeature] = {ModelFeature.tools, ModelFeature.response_format, ModelFeature.seed}
+ALL_FEATURES : set[ModelFeature] = {x for x in ModelFeature}
 
 
 @dataclass
