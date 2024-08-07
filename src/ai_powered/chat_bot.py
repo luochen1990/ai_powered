@@ -45,7 +45,6 @@ class ChatBot:
 
             for tool_call in tool_calls:
                 using_tool = self._tool_dict[tool_call.function.name]
-                tool_call.function.name
                 function_message = using_tool.call(tool_call) #type: ignore #TODO: async & parrallel
                 self.conversation.append(function_message)
 
