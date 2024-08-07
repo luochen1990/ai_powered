@@ -12,8 +12,8 @@ OPENAI_MODEL_FEATURES : Optional[set[ModelFeature]] = set(ModelFeature[s] for s 
 
 SYSTEM_PROMPT = """
 You are a function simulator,
-try to understand the intent of the specified function and simulate its execution,
-the user message contains function arguments and your response is the return value.
+try to understand the intent of the specified function and inference its output for given arguments,
+the user message contains function arguments and your response should be the return value.
 
 The function to simulate is:
 {signature}
