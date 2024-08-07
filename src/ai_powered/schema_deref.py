@@ -5,6 +5,12 @@ def deref(schema: dict[str, Any]) -> dict[str, Any]:
     '''
     msgspec 给出的 json schema 会包含 $ref 字段，这个函数用于将 $ref 字段替换为具体的 schema
 
+    这一行为是符合标准的，见:  https://json-schema.org/understanding-json-schema/structuring#dollarref
+
+    但 OpenAI 及大部分 LLM 服务商尚不支持 $ref 字段，所以需要将其展开以获得更好的效果.
+
+    当然这一做法也有其局限性，比如无法处理环状引用，但这只能等到服务商支持 $ref 字段后再解决.
+
     {'$ref': '#/$defs/ArgObj', '$defs': {'ArgObj': {'title': 'ArgObj', 'type': 'object', 'properties': {'python_expression': {'type': 'string'}}, 'required': ['python_expression']}}}
 
     最终返回结果的最外层形如:
