@@ -1,10 +1,14 @@
 import os
+from typing import Optional
+
+from ai_powered.llm_adapter.definitions import ModelFeature
 
 DEBUG = os.environ.get('DEBUG', 'False').lower() in {'true', '1', 'yes', 'on'}
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "sk-1234567890ab-MOCK-API-KEY")
 OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
 OPENAI_MODEL_NAME = os.environ.get("OPENAI_MODEL_NAME")
-OPENAI_MODEL_FEATURES = os.environ.get("OPENAI_MODEL_FEATURES")
+_features_str = os.environ.get("OPENAI_MODEL_FEATURES")
+OPENAI_MODEL_FEATURES : Optional[set[ModelFeature]] = set(ModelFeature[s] for s in _features_str.split(',')) if _features_str else None
 
 SYSTEM_PROMPT = """
 You are a function simulator,

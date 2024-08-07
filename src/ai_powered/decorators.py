@@ -8,7 +8,7 @@ from ai_powered.llm_adapter.definitions import ModelFeature
 from ai_powered.llm_adapter.generic_adapter import GenericFunctionSimulator
 from ai_powered.llm_adapter.known_models import complete_model_config
 from ai_powered.schema_deref import deref
-from ai_powered.constants import DEBUG, OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL_NAME, SYSTEM_PROMPT, SYSTEM_PROMPT_JSON_SYNTAX, SYSTEM_PROMPT_RETURN_SCHEMA
+from ai_powered.constants import DEBUG, OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL_FEATURES, OPENAI_MODEL_NAME, SYSTEM_PROMPT, SYSTEM_PROMPT_JSON_SYNTAX, SYSTEM_PROMPT_RETURN_SCHEMA
 from ai_powered.colors import gray, green
 import inspect
 
@@ -46,7 +46,7 @@ def ai_powered(fn : Callable[P, R]) -> Callable[P, R]:
             print(f"{param_name} (json schema): {schema}")
         print(f"return (json schema): {return_schema}")
 
-    model_config = complete_model_config(OPENAI_BASE_URL, OPENAI_MODEL_NAME)
+    model_config = complete_model_config(OPENAI_BASE_URL, OPENAI_MODEL_NAME, OPENAI_MODEL_FEATURES)
     model_name = model_config.model_name
     model_features: set[ModelFeature] = model_config.supported_features
     model_options: dict[str, Any] = model_config.suggested_options
@@ -55,7 +55,7 @@ def ai_powered(fn : Callable[P, R]) -> Callable[P, R]:
         signature = sig,
         docstring = docstring or "no doc, guess intention from function name",
         parameters_schema = json.dumps(parameters_schema),
-    ) + ("" if "function_call" in model_features else SYSTEM_PROMPT_RETURN_SCHEMA.format(
+    ) + ("" if ModelFeature.tools in model_features else SYSTEM_PROMPT_RETURN_SCHEMA.format(
         return_schema = json.dumps(return_schema),
     ) + SYSTEM_PROMPT_JSON_SYNTAX )
 

@@ -50,8 +50,8 @@ class GenericFunctionSimulator (FunctionSimulator):
         response = client.chat.completions.create(
             model = self.model_name,
             messages = messages,
-            tools = tools if "function_call" in self.model_features else openai.NOT_GIVEN,
-            tool_choice = {"type": "function", "function": {"name": "return_result"}} if "function_call" in self.model_features else openai.NOT_GIVEN,
+            tools = tools if ModelFeature.tools in self.model_features else openai.NOT_GIVEN,
+            tool_choice = {"type": "function", "function": {"name": "return_result"}} if ModelFeature.tools in self.model_features else openai.NOT_GIVEN,
         )
         if DEBUG:
             print(yellow(f"{response =}"))

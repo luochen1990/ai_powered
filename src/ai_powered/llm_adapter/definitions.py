@@ -1,7 +1,7 @@
 from abc import ABC
 from dataclasses import dataclass
+import enum
 from typing import Any, Optional
-from typing_extensions import Literal
 
 '''
     信息确定的过程:
@@ -12,9 +12,19 @@ from typing_extensions import Literal
     最终模拟函数执行时,需要参考函数信息和模型信息,以及连接信息,来确定函数执行的具体方式
 '''
 
-#Ref: https://ollama.fan/reference/openai/#supported-features
-ModelFeature = Literal["function_call", "response_json", "specify_seed"]
-ALL_FEATURES : set[ModelFeature] = {"function_call", "response_json", "specify_seed"}
+class ModelFeature (enum.Enum):
+    '''
+    Ollama Doc: https://ollama.fan/reference/openai/#supported-features
+    OpenAI Doc:
+    - tools: https://platform.openai.com/docs/guides/function-calling
+    - response_format: https://platform.openai.com/docs/guides/structured-outputs
+    - seed: https://platform.openai.com/docs/advanced-usage/reproducible-outputs
+    '''
+    tools = "tools"
+    response_format = "response_format"
+    seed = "seed"
+
+ALL_FEATURES : set[ModelFeature] = {ModelFeature.tools, ModelFeature.response_format, ModelFeature.seed}
 
 
 @dataclass(frozen=True)
