@@ -1,30 +1,15 @@
 import inspect
-from typing import Callable, Dict, Generic
-from typing_extensions import Literal, ParamSpec, Required, TypeVar, TypedDict
+from typing import Callable, Generic
+from typing_extensions import ParamSpec, TypeVar
 import msgspec
 
+from openai.types.chat.chat_completion_tool_param import ChatCompletionToolParam
+from openai.types.chat.chat_completion_named_tool_choice_param import ChatCompletionNamedToolChoiceParam
+from openai.types.chat.chat_completion_tool_message_param import ChatCompletionToolMessageParam
+from openai.types.chat.chat_completion_message_tool_call import ChatCompletionMessageToolCall
 from ai_powered.colors import gray, green
 from ai_powered.constants import DEBUG
-from ai_powered.llm.openai.param_types import ChatCompletionToolMessageParam
-from ai_powered.llm.openai.types import ChatCompletionMessageToolCall
 from ai_powered.schema_deref import deref
-
-FunctionParameters = Dict[str, object]
-
-class FunctionDefinition(TypedDict, total=False):
-    name: Required[str] #identifier, max length 64
-    description: str
-    parameters: FunctionParameters
-
-class ChatCompletionToolParam(TypedDict):
-    function: Required[FunctionDefinition]
-    type: Required[Literal["function"]]
-
-class Function(TypedDict):
-    name: Required[str]
-class ChatCompletionNamedToolChoiceParam(TypedDict):
-    type: Required[Literal["function"]]
-    function: Required[Function]
 
 P = ParamSpec("P")
 R = TypeVar("R")
