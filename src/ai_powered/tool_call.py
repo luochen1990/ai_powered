@@ -5,8 +5,8 @@ import msgspec
 
 from ai_powered.colors import gray, green
 from ai_powered.constants import DEBUG
-from ai_powered.llm_adapter.openai.param_types import ChatCompletionToolMessageParam
-from ai_powered.llm_adapter.openai.types import ChatCompletionMessageToolCall
+from ai_powered.llm.openai.param_types import ChatCompletionToolMessageParam
+from ai_powered.llm.openai.types import ChatCompletionMessageToolCall
 from ai_powered.schema_deref import deref
 
 FunctionParameters = Dict[str, object]

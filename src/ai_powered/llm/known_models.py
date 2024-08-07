@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Optional, Set
 from typing_extensions import TypeAlias
 
-from ai_powered.llm_adapter.definitions import ALL_FEATURES, ModelFeature
+from ai_powered.llm.definitions import ALL_FEATURES, ModelFeature
 
 @dataclass(frozen=True)
 class KnownPlatform:

@@ -4,9 +4,9 @@ from typing_extensions import ParamSpec, TypeVar
 import json
 import msgspec
 
-from ai_powered.llm_adapter.definitions import ModelFeature
-from ai_powered.llm_adapter.generic_adapter import GenericFunctionSimulator
-from ai_powered.llm_adapter.known_models import complete_model_config
+from ai_powered.llm.definitions import ModelFeature
+from ai_powered.llm.generic_adapter import GenericFunctionSimulator
+from ai_powered.llm.known_models import complete_model_config
 from ai_powered.schema_deref import deref
 from ai_powered.constants import DEBUG, OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL_FEATURES, OPENAI_MODEL_NAME, SYSTEM_PROMPT, SYSTEM_PROMPT_JSON_SYNTAX, SYSTEM_PROMPT_RETURN_SCHEMA
 from ai_powered.colors import gray, green

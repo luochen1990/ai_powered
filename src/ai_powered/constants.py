@@ -1,7 +1,7 @@
 import os
 from typing import Optional
 
-from ai_powered.llm_adapter.definitions import ModelFeature
+from ai_powered.llm.definitions import ModelFeature
 
 DEBUG = os.environ.get('DEBUG', 'False').lower() in {'true', '1', 'yes', 'on'}
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "sk-1234567890ab-MOCK-API-KEY")

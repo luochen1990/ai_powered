@@ -4,8 +4,8 @@ import openai
 
 from ai_powered.colors import gray
 from ai_powered.constants import DEBUG, OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL_NAME, OPENAI_MODEL_FEATURES
-from ai_powered.llm_adapter.known_models import complete_model_config
-from ai_powered.llm_adapter.openai.param_types import ChatCompletionMessageParam
+from ai_powered.llm.known_models import complete_model_config
+from ai_powered.llm.openai.param_types import ChatCompletionMessageParam
 from ai_powered.tool_call import ChatCompletionToolParam, MakeTool
 
 default_client = openai.OpenAI(base_url=OPENAI_BASE_URL, api_key=OPENAI_API_KEY)

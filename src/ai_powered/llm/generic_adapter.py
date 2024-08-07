@@ -4,7 +4,7 @@ import re
 import openai
 from ai_powered.colors import green, yellow
 from ai_powered.constants import DEBUG
-from ai_powered.llm_adapter.definitions import FunctionSimulator, ModelFeature
+from ai_powered.llm.definitions import FunctionSimulator, ModelFeature
 
 def _return_schema_wrapper(return_schema: dict[str, Any]) -> dict[str, Any]:
     return {
