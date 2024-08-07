@@ -82,21 +82,24 @@ ModelConfig : TypeAlias = KnownModel
 
 def complete_model_config(platform_url: str, model_name: Optional[str], model_supported_features: Optional[Set[ModelFeature]]) -> ModelConfig:
     ''' select a known model from a known platform '''
+
     for platform in KNOWN_PLATFORMS:
         if platform.match_platform_url(platform_url):
             #NOTE: known platform
+
+            #NOTE: default for unknown model_name (not specified or not found in known models)
             selected_config = platform.known_model_list[0]
+
             if model_name is not None:
                 for known_model in platform.known_model_list:
                     if model_name.startswith(known_model.model_name):
                         #NOTE: known platform and model_name
                         selected_config = known_model
 
-            #NOTE: known platform, but unknown model_name (not specified or not found in known models)
-            return selected_config.override(model_name=model_name, supported_features=(model_supported_features or ALL_FEATURES))
+            return selected_config.override(model_name=model_name, supported_features=model_supported_features)
 
     #NOTE: unknown platform
     if model_name is not None:
-        return ModelConfig(model_name, (model_supported_features or ALL_FEATURES))
+        return ModelConfig(model_name, (model_supported_features or {ModelFeature.function_calling}))
     else:
-        raise ValueError(f"Unknown platform: {platform_url}, please specify a model name")
+        raise ValueError(f"Unknown platform: {platform_url}, please set OPENAI_MODEL_NAME manually")
