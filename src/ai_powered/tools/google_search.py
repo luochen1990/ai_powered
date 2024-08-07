@@ -18,7 +18,13 @@ GOOGLE_ENGINE_ID = os.getenv("GOOGLE_ENGINE_ID", "mock_google_pse_engine_id")
 
 @make_tool
 def google_search(keywords: str, options: SearchOption) -> List[SearchResult]:
-    ''' 用Google搜索互联网,对于专业问题请用英文关键词搜索 '''
+    '''
+    Use Google to search the internet.
+    For professional inquiries, use English keywords for the search.
+    For time-sensitive questions, filter the search results using the dateRestrict option:
+        d[1] means within the last day, w[1] means within the last week, m[1] means within the last month.
+    '''
+
     url = "https://www.googleapis.com/customsearch/v1"
     params : dict[str, str] = {
         "key": GOOGLE_API_KEY,
@@ -28,7 +34,7 @@ def google_search(keywords: str, options: SearchOption) -> List[SearchResult]:
     }
 
     response = requests.get(url, params=params)
-    response.raise_for_status()  # 如果请求失败，抛出异常
+    response.raise_for_status()  # if failed, raise exception
 
     search_results = response.json()
     results : list[SearchResult] = []
