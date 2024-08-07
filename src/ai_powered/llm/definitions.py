@@ -27,7 +27,7 @@ class ModelFeature (enum.Enum):
 ALL_FEATURES : set[ModelFeature] = {ModelFeature.tools, ModelFeature.response_format, ModelFeature.seed}
 
 
-@dataclass(frozen=True)
+@dataclass
 class FunctionSimulator (ABC):
     ''' just a wrapper to call model, without checking type correctness '''
 
@@ -37,5 +37,5 @@ class FunctionSimulator (ABC):
     parameters_schema: dict[str, Any]
     return_schema: dict[str, Any]
 
-    def execute(self, arguments_json: str) -> str:
+    def query_model(self, arguments_json: str) -> str:
         ...

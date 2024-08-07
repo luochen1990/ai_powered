@@ -1,11 +1,12 @@
 from functools import wraps
 from typing import Any, Callable, Generic
+import openai
 from typing_extensions import ParamSpec, TypeVar
 import json
 import msgspec
 
 from ai_powered.llm.definitions import ModelFeature
-from ai_powered.llm.generic_adapter import GenericFunctionSimulator
+from ai_powered.llm.adapter_selector import FunctionSimulatorSelector
 from ai_powered.llm.known_models import complete_model_config
 from ai_powered.schema_deref import deref
 from ai_powered.constants import DEBUG, OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL_FEATURES, OPENAI_MODEL_NAME, SYSTEM_PROMPT, SYSTEM_PROMPT_JSON_SYNTAX, SYSTEM_PROMPT_RETURN_SCHEMA
@@ -46,6 +47,7 @@ def ai_powered(fn : Callable[P, R]) -> Callable[P, R]:
             print(f"{param_name} (json schema): {schema}")
         print(f"return (json schema): {return_schema}")
 
+    client = openai.OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
     model_config = complete_model_config(OPENAI_BASE_URL, OPENAI_MODEL_NAME, OPENAI_MODEL_FEATURES)
     model_name = model_config.model_name
     model_features: set[ModelFeature] = model_config.supported_features
@@ -63,9 +65,9 @@ def ai_powered(fn : Callable[P, R]) -> Callable[P, R]:
         print(f"{sys_prompt =}")
         print(f"{return_schema =}")
 
-    fn_simulator = GenericFunctionSimulator(
+    fn_simulator = FunctionSimulatorSelector(
         function_name, f"{sig}", docstring, parameters_schema, return_schema,
-        OPENAI_BASE_URL, OPENAI_API_KEY, model_name, model_features, model_options, sys_prompt
+        client, model_name, model_features, model_options
     )
 
     if DEBUG:
