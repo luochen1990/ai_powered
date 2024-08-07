@@ -5,7 +5,7 @@ from typing_extensions import TypeAlias
 
 from ai_powered.llm_adapter.definitions import ALL_FEATURES, ModelFeature
 
-@dataclass
+@dataclass(frozen=True)
 class KnownPlatform:
     ''' information about a known platform '''
 
@@ -13,7 +13,7 @@ class KnownPlatform:
     match_platform_url: Callable[[str], bool]
     known_model_list: list["KnownModel"]
 
-@dataclass
+@dataclass(frozen=True)
 class KnownModel:
     ''' information about a known model '''
 
