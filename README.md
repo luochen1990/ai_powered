@@ -111,3 +111,9 @@ Regarding Code Contribution
 1. Currently, all code is under Pyright strict mode type checking, and any type errors will be blocked by GitHub Actions. We do not recommend using `Any` or `#type: ignore` unless absolutely necessary.
 2. Test coverage will be continuously monitored. It is recommended to always provide tests for your code, and even prepare the tests before coding. tips: you can mark tests for WIP features use `@pytest.mark.xfail`.
 3. Regarding the development environment, it is recommended to install `nix` and `direnv` so that you automatically get a usable development environment. Of course, `poetry shell` is also a good choice (if you are already using poetry).
+
+Acknowledgments
+--------------
+
+- [instructor](https://jxnl.github.io/instructor/): It has made significant contributions to advancing LLM in supporting structured output.
+- [msgspec](https://github.com/jcrist/msgspec): Rapid serialization/deserialization of data and providing JSON schema, which is one of the most crucial libraries relied upon by this project.
