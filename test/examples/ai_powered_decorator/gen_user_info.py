@@ -10,6 +10,7 @@ class UserInfo:
 
 @ai_powered
 def gen_user_info() -> UserInfo:
+    ''' ramdomly generate user info for testing, None is used for unknown fields '''
     ...
 
 @ai_powered
