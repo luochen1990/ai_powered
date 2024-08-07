@@ -21,6 +21,21 @@ class KnownModel:
     supported_features: Set[ModelFeature]
     suggested_options: dict[str, Any] = field(default_factory=dict)
 
+    def copy(self) -> "KnownModel":
+        ''' create a copy of the known model information '''
+        return KnownModel(
+            model_name = self.model_name,
+            supported_features = deepcopy(self.supported_features),
+            suggested_options = deepcopy(self.suggested_options)
+        )
+
+    def override(self, model_name: Optional[str] = None, supported_features: Optional[Set[ModelFeature]] = None, suggested_options: Optional[dict[str, Any]] = None) -> "KnownModel":
+        ''' override the known model information '''
+        return KnownModel(
+            model_name = model_name if model_name is not None else self.model_name,
+            supported_features = deepcopy(supported_features or self.supported_features),
+            suggested_options = deepcopy(suggested_options or self.suggested_options)
+        )
 
 def contains(s: str) -> Callable[[str], bool]:
     ''' create a function to check if a string contains a substring '''
@@ -65,23 +80,23 @@ KNOWN_PLATFORMS : list[KnownPlatform] = [
 
 ModelConfig : TypeAlias = KnownModel
 
-def complete_model_config(platform_url: str, model_name: Optional[str]) -> ModelConfig:
+def complete_model_config(platform_url: str, model_name: Optional[str], model_supported_features: Optional[Set[ModelFeature]]) -> ModelConfig:
     ''' select a known model from a known platform '''
     for platform in KNOWN_PLATFORMS:
         if platform.match_platform_url(platform_url):
+            #NOTE: known platform
+            selected_config = platform.known_model_list[0]
             if model_name is not None:
                 for known_model in platform.known_model_list:
                     if model_name.startswith(known_model.model_name):
-                        return known_model
-            else:
-                return platform.known_model_list[0] #known platform, but model not specified
+                        #NOTE: known platform and model_name
+                        selected_config = known_model
 
-            #known platform, but unknown model_name specified
-            default_options = deepcopy(platform.known_model_list[0].suggested_options)
-            return ModelConfig(model_name, ALL_FEATURES, default_options)
+            #NOTE: known platform, but unknown model_name (not specified or not found in known models)
+            return selected_config.override(model_name=model_name, supported_features=(model_supported_features or ALL_FEATURES))
 
-    #unknown platform
+    #NOTE: unknown platform
     if model_name is not None:
-        return ModelConfig(model_name, ALL_FEATURES)
+        return ModelConfig(model_name, (model_supported_features or ALL_FEATURES))
     else:
         raise ValueError(f"Unknown platform: {platform_url}, please specify a model name")
