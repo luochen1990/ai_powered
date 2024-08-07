@@ -14,12 +14,21 @@ class StructuredOutputFunctionSimulator (GenericFunctionSimulator):
             "json_schema": {
                 "name": "math_response",
                 #"strict": True if ModelFeature.strict_mode in self.model_features else None, #NOTE: https://platform.openai.com/docs/guides/structured-outputs/supported-schemas
-                "schema": self.return_schema,
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "result": self.return_schema,
+                    },
+                    "required": ["result"],
+                }
             }
         }
 
     def _response_message_parser(self, response_message: ChatCompletionMessage) -> str:
         tool_calls = response_message.tool_calls
+        assert tool_calls is None
 
-        assert tool_calls is not None
-        return tool_calls[0].function.arguments
+        raw_resp_str = response_message.content
+        assert raw_resp_str is not None
+
+        return raw_resp_str
