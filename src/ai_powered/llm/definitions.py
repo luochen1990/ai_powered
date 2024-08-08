@@ -33,3 +33,6 @@ class FunctionSimulator (ABC):
 
     def query_model(self, arguments_json: str) -> str:
         ...
+
+    async def query_model_async(self, arguments_json: str) -> str:
+        ...

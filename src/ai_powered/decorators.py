@@ -1,5 +1,6 @@
+import asyncio
 from functools import wraps
-from typing import Any, Callable, Generic
+from typing import Any, Awaitable, Callable, Generic, overload
 import openai
 from typing_extensions import ParamSpec, TypeVar
 import json
@@ -20,7 +21,15 @@ class Result (msgspec.Struct, Generic[A]):
 P = ParamSpec("P")
 R = TypeVar("R")
 
-def ai_powered(fn : Callable[P, R]) -> Callable[P, R]:
+@overload
+def ai_powered(fn: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
+    ...
+
+@overload
+def ai_powered(fn: Callable[P, R]) -> Callable[P, R]:
+    ...
+
+def ai_powered(fn : Callable[P, Awaitable[R]] | Callable[P, R]) -> Callable[P, Awaitable[R]] | Callable[P, R]:
     ''' Provide an AI powered implementation of a function '''
 
     function_name = fn.__name__
@@ -48,6 +57,7 @@ def ai_powered(fn : Callable[P, R]) -> Callable[P, R]:
         print(f"return (json schema): {return_schema}")
 
     client = openai.OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
+    async_client = openai.AsyncOpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
     model_config = complete_model_config(OPENAI_BASE_URL, OPENAI_MODEL_NAME, OPENAI_MODEL_FEATURES)
     model_name = model_config.model_name
     model_features: set[ModelFeature] = model_config.supported_features
@@ -67,7 +77,7 @@ def ai_powered(fn : Callable[P, R]) -> Callable[P, R]:
 
     fn_simulator = FunctionSimulatorSelector(
         function_name, f"{sig}", docstring, parameters_schema, return_schema,
-        client, model_name, model_features, model_options
+        client, async_client, model_name, model_features, model_options
     )
 
     if DEBUG:
@@ -83,6 +93,7 @@ def ai_powered(fn : Callable[P, R]) -> Callable[P, R]:
             print(f"{real_arg_str =}")
 
         resp_str = fn_simulator.query_model(real_arg_str)
+
         if DEBUG:
             print(f"{resp_str =}")
             print(green(f"[fn {function_name}] response extracted."))
@@ -94,4 +105,30 @@ def ai_powered(fn : Callable[P, R]) -> Callable[P, R]:
 
         return returned_result.result #type: ignore
 
-    return wrapper_fn
+    @wraps(fn)
+    async def wrapper_fn_async(*args: P.args, **kwargs: P.kwargs) -> R:
+        real_arg = sig.bind(*args, **kwargs)
+        real_arg_str = msgspec.json.encode(real_arg.arguments).decode('utf-8')
+
+        if DEBUG:
+            print(f"{real_arg_str =}")
+
+        # NOTE: the main logic
+        resp_str = await fn_simulator.query_model_async(real_arg_str)
+
+        if DEBUG:
+            print(f"{resp_str =}")
+            print(green(f"[fn {function_name}] response extracted."))
+
+        returned_result = msgspec.json.decode(resp_str, type=result_type)
+        if DEBUG:
+            print(f"{returned_result =}")
+            print(green(f"[fn {function_name}] response validated."))
+
+        return returned_result.result #type: ignore
+
+
+    if asyncio.iscoroutinefunction(fn):
+        return wrapper_fn_async
+    else:
+        return wrapper_fn

@@ -14,17 +14,17 @@ class FunctionSimulatorSelector (GenericFunctionSimulator):
         if ModelFeature.structured_outputs in self.model_features:
             return StructuredOutputFunctionSimulator(
                 self.function_name, self.signature, self.docstring, self.parameters_schema, self.return_schema,
-                self.client, self.model_name, self.model_features, self.model_options
+                self.client, self.async_client, self.model_name, self.model_features, self.model_options
             )
         elif ModelFeature.tools in self.model_features:
             return ToolsFunctionSimulator(
                 self.function_name, self.signature, self.docstring, self.parameters_schema, self.return_schema,
-                self.client, self.model_name, self.model_features, self.model_options
+                self.client, self.async_client, self.model_name, self.model_features, self.model_options
             )
         else:
             return ChatFunctionSimulator(
                 self.function_name, self.signature, self.docstring, self.parameters_schema, self.return_schema,
-                self.client, self.model_name, self.model_features, self.model_options
+                self.client, self.async_client, self.model_name, self.model_features, self.model_options
             )
 
     def __post_init__(self):
@@ -33,3 +33,7 @@ class FunctionSimulatorSelector (GenericFunctionSimulator):
 
     def query_model(self, arguments_json: str) -> str:
         return self._selected_impl.query_model(arguments_json)
+
+    async def query_model_async(self, arguments_json: str) -> str:
+        result = await self._selected_impl.query_model_async(arguments_json)
+        return result

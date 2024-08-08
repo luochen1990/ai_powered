@@ -26,6 +26,7 @@ class ToolsFunctionSimulator (GenericFunctionSimulator):
     def _param_tool_choice_maker(self) -> ChatCompletionToolChoiceOptionParam | openai.NotGiven:
         return {"type": "function", "function": {"name": "return_result"}}
 
+    #@override
     def _response_message_parser(self, response_message: ChatCompletionMessage) -> str:
         tool_calls = response_message.tool_calls
 
