@@ -11,6 +11,7 @@ include = ["src"]
 python = ">=3.10,<4"
 openai = "^1.35.14"
 msgspec = "^0.18.6"
+easy-sync = "^0.2.1"
 
 [tool.poetry.group.test.dependencies]
 pytest = "^8.2.2"

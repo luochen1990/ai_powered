@@ -398,6 +398,17 @@ files = [
 ]
 
 [[package]]
+name = "easy-sync"
+version = "0.2.2"
+description = "Provide sync compatibility for your async functions"
+optional = false
+python-versions = "<4,>=3.10"
+files = [
+    {file = "easy_sync-0.2.2-py3-none-any.whl", hash = "sha256:4e5f44bfd764b42b9d985b1321c8b36fa26ababd19e389c6e749c047aeca1e10"},
+    {file = "easy_sync-0.2.2.tar.gz", hash = "sha256:aa4a0a765f723d76220049d9cda65700da6274a9dd27983116c641585839d236"},
+]
+
+[[package]]
 name = "exceptiongroup"
 version = "1.2.2"
 description = "Backport of PEP 654 (exception groups)"
@@ -2007,4 +2018,4 @@ h11 = ">=0.9.0,<1"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<4"
-content-hash = "953744e53eb0c0abc41347dab4326752f889e9e2b665e4a1ebebfd0bacdd1870"
+content-hash = "c3ba10f63a474ee8b568771f99c7d862e649467bfa6a2d5ebe43acdc70ca67aa"
