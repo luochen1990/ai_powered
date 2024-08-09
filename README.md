@@ -12,6 +12,15 @@ With these tools, you don't need to redesign the entire software to leverage AI 
 
 Even so, you don't need to learn anything about the OpenAI SDK to achieve these tasks, all within just a few minutes!
 
+Features
+--------
+
+1. The `@ai_powered` decorator auto provide implementation for your python function with signature and docstring (call LLM underground)
+2. The `@make_tool` decorator turn your python function (with type annotations) into tools available by OpenAI API
+3. The `ChatBot` class can be inherited to create your own chatbot with tools empowered
+4. Strict type annotation (validated by pylance the strict mode)
+5. With unit test, and test coverage ratio is monitored
+
 Usage
 ---
 
