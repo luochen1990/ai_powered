@@ -54,11 +54,7 @@ jobs:
           COV_ARG="--cov=src --cov-report=term --cov-report=xml"
         fi
 
-        if [ -n "$RUNNER_DEBUG" || -n "$COV_ARG" ]; then
-          export DEBUG=True
-        else
-          export DEBUG=False
-        fi
+        export DEBUG=$(if [ -n "$RUNNER_DEBUG" ] || [ -n "$COV_ARG" ]; then echo "True"; else echo "False"; fi)
 
         if [ -n "$RUNNER_DEBUG" ]; then
           DBG_ARG="-n0 -s"
@@ -66,7 +62,8 @@ jobs:
           DBG_ARG=""
         fi
 
-        echo DBG_ARG="$DBG_ARG" COV_ARG="$COV_ARG"
+        echo DEBUG: $DEBUG
+        echo CMD: pytest $DBG_ARG $COV_ARG
         pytest $DBG_ARG $COV_ARG
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
