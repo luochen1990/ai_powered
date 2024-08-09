@@ -24,7 +24,7 @@ Features
 Usage
 ---
 
-Installation is done by `pip install ai_powered` or `poetry add ai_powered`.
+Installation is done by `pip install ai_powered` or `poetry add ai_powered`. ([pypi](https://pypi.org/project/ai-powered/))
 
 And provide your API keys via environment variables ([more details](/doc/en/Configuration.md)):
 
