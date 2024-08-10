@@ -1,6 +1,7 @@
 import asyncio
 from functools import wraps
 from typing import Any, Awaitable, Callable, Generic, overload
+from easy_sync import sync_compatible
 import openai
 from typing_extensions import ParamSpec, TypeVar
 import json
@@ -106,6 +107,7 @@ def ai_powered(fn : Callable[P, Awaitable[R]] | Callable[P, R]) -> Callable[P, A
         return returned_result.result #type: ignore
 
     @wraps(fn)
+    @sync_compatible
     async def wrapper_fn_async(*args: P.args, **kwargs: P.kwargs) -> R:
         real_arg = sig.bind(*args, **kwargs)
         real_arg_str = msgspec.json.encode(real_arg.arguments).decode('utf-8')
