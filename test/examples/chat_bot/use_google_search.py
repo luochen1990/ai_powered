@@ -10,5 +10,5 @@ class MyChatBot (ChatBot):
 
 def test_use_google_search():
     bot = MyChatBot()
-    print(green(bot.chat("what's USD price in CNY today?")))
+    print(green(bot.chat("what's USD price in CNY today?").wait()))
     print(gray(f"{bot.conversation}"))

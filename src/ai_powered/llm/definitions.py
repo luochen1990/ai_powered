@@ -3,6 +3,8 @@ from dataclasses import dataclass
 import enum
 from typing import Any, Optional
 
+from easy_sync import sync_compatible
+
 class ModelFeature (enum.Enum):
     '''
     Ollama Doc: https://ollama.fan/reference/openai/#supported-features
@@ -31,8 +33,6 @@ class FunctionSimulator (ABC):
     parameters_schema: dict[str, Any]
     return_schema: dict[str, Any]
 
-    def query_model(self, arguments_json: str) -> str:
-        ...
-
-    async def query_model_async(self, arguments_json: str) -> str:
+    @sync_compatible
+    async def query_model(self, arguments_json: str) -> str:
         ...

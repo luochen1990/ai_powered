@@ -6,6 +6,7 @@ from typing_extensions import ParamSpec, TypeVar
 import json
 import msgspec
 
+from ai_powered.llm.connection import LlmConnection
 from ai_powered.llm.definitions import ModelFeature
 from ai_powered.llm.adapter_selector import FunctionSimulatorSelector
 from ai_powered.llm.known_models import complete_model_config
@@ -56,8 +57,7 @@ def ai_powered(fn : Callable[P, Awaitable[R]] | Callable[P, R]) -> Callable[P, A
             print(f"{param_name} (json schema): {schema}")
         print(f"return (json schema): {return_schema}")
 
-    client = openai.OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
-    async_client = openai.AsyncOpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
+    connection = LlmConnection(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
     model_config = complete_model_config(OPENAI_BASE_URL, OPENAI_MODEL_NAME, OPENAI_MODEL_FEATURES)
     model_name = model_config.model_name
     model_features: set[ModelFeature] = model_config.supported_features
@@ -77,7 +77,7 @@ def ai_powered(fn : Callable[P, Awaitable[R]] | Callable[P, R]) -> Callable[P, A
 
     fn_simulator = FunctionSimulatorSelector(
         function_name, f"{sig}", docstring, parameters_schema, return_schema,
-        client, async_client, model_name, model_features, model_options
+        connection, model_name, model_features, model_options
     )
 
     if DEBUG:
@@ -92,7 +92,7 @@ def ai_powered(fn : Callable[P, Awaitable[R]] | Callable[P, R]) -> Callable[P, A
         if DEBUG:
             print(f"{real_arg_str =}")
 
-        resp_str = fn_simulator.query_model(real_arg_str)
+        resp_str = fn_simulator.query_model(real_arg_str).wait()
 
         if DEBUG:
             print(f"{resp_str =}")
@@ -114,7 +114,7 @@ def ai_powered(fn : Callable[P, Awaitable[R]] | Callable[P, R]) -> Callable[P, A
             print(f"{real_arg_str =}")
 
         # NOTE: the main logic
-        resp_str = await fn_simulator.query_model_async(real_arg_str)
+        resp_str = await fn_simulator.query_model(real_arg_str)
 
         if DEBUG:
             print(f"{resp_str =}")
