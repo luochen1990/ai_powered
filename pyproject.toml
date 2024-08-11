@@ -27,6 +27,18 @@ funix = "^0.5.8"
 testpaths = ["test", "test/examples/**/*.py"]
 addopts = "-n auto"
 
+[tool.pyright]
+strict = ["all"]
+
+[tool.yapf]
+based_on_style = "google"
+column_limit=150
+dedent_closing_brackets=true
+join_multiple_lines=true
+split_before_first_argument=true
+indent_blank_lines=false
+spaces_around_default_or_named_assign=true
+
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
