@@ -2,7 +2,6 @@ import asyncio
 from functools import wraps
 from typing import Any, Awaitable, Callable, Generic, overload
 from easy_sync import sync_compatible
-import openai
 from typing_extensions import ParamSpec, TypeVar
 import json
 import msgspec
