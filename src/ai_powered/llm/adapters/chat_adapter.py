@@ -1,10 +1,12 @@
 import json
-from typing import Callable
 import re
+from openai.types.chat.chat_completion_message import ChatCompletionMessage
 from ai_powered.constants import DEBUG, SYSTEM_PROMPT_JSON_SYNTAX, SYSTEM_PROMPT_RETURN_SCHEMA
 from ai_powered.llm.adapters.generic_adapter import GenericFunctionSimulator
-from openai.types.chat.chat_completion_message import ChatCompletionMessage
+from ai_powered.utils.parse_message import extract_json_from_message
 
+
+_result_pattern = re.compile(r'^\s*\{\s*"result"\s*:') # "{"result": 2}" | "{ "result" : 2 }"
 
 class ChatFunctionSimulator (GenericFunctionSimulator):
     ''' implementation of FunctionSimulator for OpenAI compatible models '''
@@ -23,34 +25,20 @@ class ChatFunctionSimulator (GenericFunctionSimulator):
             raw_resp_str = response_message.content
             assert raw_resp_str is not None
 
-            raw_resp_str_strip = raw_resp_str.strip()
-            # raw_resp_str = "```json\n{"result": 2}\n```"
-
-            is_markdown : Callable[[str], bool]= lambda s: s.startswith("```") and s.endswith("```")
-
-            if is_markdown(raw_resp_str_strip):
-                if raw_resp_str_strip.startswith("```json"):
-                    unwrapped_resp_str = raw_resp_str_strip[7:-3]
-                else:
-                    unwrapped_resp_str = raw_resp_str_strip[3:-3]
-            else:
-                unwrapped_resp_str = raw_resp_str_strip
-
-            if DEBUG:
-                print(f"{unwrapped_resp_str =}")
-
-            is_result : Callable[[str], bool] = lambda s: re.match(r'^\s*\{\s*"result":' , s) is not None
-
-            # unwrapped_result_str = "2" | "{"result": 2}" | "{ "result": 2 }"
-            if is_result(unwrapped_resp_str):
-                result_str = unwrapped_resp_str
-            else:
-                result_str = f'{{"result": {unwrapped_resp_str}}}'
-
             if DEBUG:
                 print(f"{raw_resp_str =}")
-                print(f"{is_markdown(raw_resp_str_strip) =}")
-                print(f"{is_result(unwrapped_resp_str) =}")
+
+            json_str = extract_json_from_message(raw_resp_str) or raw_resp_str
+
+            if DEBUG:
+                print(f"{json_str =}")
+
+            if re.match(_result_pattern, json_str): # wrapped by `{"result": ...}`
+                result_str = json_str
+            else: # not wrapped by `{"result": ...}`
+                result_str = f'{{"result": {json_str}}}'
+
+            if DEBUG:
                 print(f"{result_str =}")
 
             return result_str
