@@ -1,13 +1,46 @@
 {
   "nodes": {
+    "easy-sync": {
+      "inputs": {
+        "nixpkgs": "nixpkgs"
+      },
+      "locked": {
+        "lastModified": 1726831038,
+        "narHash": "sha256-SnV2HwHmbnhC24vElF1M4jgV2y7auu1HahmRWL0OBik=",
+        "owner": "luochen1990",
+        "repo": "easy-sync",
+        "rev": "93f25ee23adad19923893cca02a76327871efd86",
+        "type": "github"
+      },
+      "original": {
+        "owner": "luochen1990",
+        "ref": "master",
+        "repo": "easy-sync",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1719848872,
-        "narHash": "sha256-H3+EC5cYuq+gQW8y0lSrrDZfH71LB4DAf+TDFyvwCNA=",
-        "path": "/nix/store/j4jzjbr302cw5bl0n3pch5j9bh5qwmaj-source",
-        "rev": "00d80d13810dbfea8ab4ed1009b09100cca86ba8",
-        "revCount": 646093,
-        "type": "path"
+        "lastModified": 1726463316,
+        "narHash": "sha256-gI9kkaH0ZjakJOKrdjaI/VbaMEo9qBbSUl93DnU7f4c=",
+        "owner": "nixos",
+        "repo": "nixpkgs",
+        "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+        "type": "github"
+      },
+      "original": {
+        "id": "nixpkgs",
+        "type": "indirect"
+      }
+    },
+    "nixpkgs_2": {
+      "locked": {
+        "lastModified": 1726463316,
+        "narHash": "sha256-gI9kkaH0ZjakJOKrdjaI/VbaMEo9qBbSUl93DnU7f4c=",
+        "owner": "nixos",
+        "repo": "nixpkgs",
+        "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+        "type": "github"
       },
       "original": {
         "id": "nixpkgs",
@@ -16,7 +49,8 @@
     },
     "root": {
       "inputs": {
-        "nixpkgs": "nixpkgs"
+        "easy-sync": "easy-sync",
+        "nixpkgs": "nixpkgs_2"
       }
     }
   },
