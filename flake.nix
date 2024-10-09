@@ -4,6 +4,7 @@
   inputs = {
     nixpkgs.url = "nixpkgs";
     easy-sync.url = "github:luochen1990/easy-sync/master";
+    easy-sync.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs = { self, nixpkgs, easy-sync }:
