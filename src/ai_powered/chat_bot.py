@@ -23,7 +23,6 @@ class ChatBot:
     conversation: list[ChatCompletionMessageParam] = field(default_factory = lambda: [])
 
     def __post_init__(self):
-        self._system_prompts: list[ChatCompletionMessageParam] = [{"role": "system", "content": s} for s in self.system_prompts]
         self._tool_dict = {tool.fn.__name__: tool for tool in self.tools}
         self._tool_schemas: list[ChatCompletionToolParam] | openai.NotGiven = [t.schema() for t in self.tools
                                                                               ] if len(self.tools) > 0 else openai.NOT_GIVEN
@@ -32,6 +31,9 @@ class ChatBot:
     async def chat_continue(self) -> str:
         if DEBUG:
             print(gray(f"{self.conversation =}"))
+
+        # NOTE: system_prompts might be updated dynamically
+        self._system_prompts: list[ChatCompletionMessageParam] = [{"role": "system", "content": s} for s in self.system_prompts]
 
         response = await self.connection.chat_completions(
             model = model_config.model_name,
