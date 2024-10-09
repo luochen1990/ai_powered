@@ -17,15 +17,16 @@ model_config = complete_model_config(OPENAI_BASE_URL, OPENAI_MODEL_NAME, OPENAI_
 class ChatBot:
     ''' A baseclass to define chatbot which can use tools '''
 
-    system_prompt : ClassVar[str] = "" # if not empty, it will prepend to the conversation
+    system_prompts: ClassVar[list[str]] = []
     tools: ClassVar[tuple[MakeTool[..., Any], ...]] = ()
     connection: ClassVar[LlmConnection] = default_connection
-    conversation : list[ChatCompletionMessageParam] = field(default_factory=lambda:[])
+    conversation: list[ChatCompletionMessageParam] = field(default_factory = lambda: [])
 
     def __post_init__(self):
-        self._system_prompt : list[ChatCompletionMessageParam] = [{"role": "system", "content": s} for s in [self.system_prompt] if len(s) > 0]
+        self._system_prompts: list[ChatCompletionMessageParam] = [{"role": "system", "content": s} for s in self.system_prompts]
         self._tool_dict = {tool.fn.__name__: tool for tool in self.tools}
-        self._tool_schemas : list[ChatCompletionToolParam] | openai.NotGiven = [ t.schema() for t in self.tools ] if len(self.tools) > 0 else openai.NOT_GIVEN
+        self._tool_schemas: list[ChatCompletionToolParam] | openai.NotGiven = [t.schema() for t in self.tools
+                                                                              ] if len(self.tools) > 0 else openai.NOT_GIVEN
 
     @sync_compatible
     async def chat_continue(self) -> str:
@@ -34,7 +35,7 @@ class ChatBot:
 
         response = await self.connection.chat_completions(
             model = model_config.model_name,
-            messages = [*self._system_prompt, *self.conversation],
+            messages = [*self._system_prompts, *self.conversation],
             tools = self._tool_schemas,
         )
         assistant_message = response.choices[0].message
