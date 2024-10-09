@@ -8,7 +8,7 @@ from ai_powered.colors import gray
 from ai_powered.constants import DEBUG, OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL_NAME, OPENAI_MODEL_FEATURES
 from ai_powered.llm.known_models import complete_model_config
 from ai_powered.llm.connection import LlmConnection
-from ai_powered.tool_call import ChatCompletionToolParam, MakeTool
+from ai_powered.tool_call import MakeTool
 
 default_connection = LlmConnection(base_url=OPENAI_BASE_URL, api_key=OPENAI_API_KEY)
 model_config = complete_model_config(OPENAI_BASE_URL, OPENAI_MODEL_NAME, OPENAI_MODEL_FEATURES)
@@ -24,8 +24,7 @@ class ChatBot:
 
     def __post_init__(self):
         self._tool_dict = {tool.fn.__name__: tool for tool in self.tools}
-        self._tool_schemas: list[ChatCompletionToolParam] | openai.NotGiven = [t.schema() for t in self.tools
-                                                                              ] if len(self.tools) > 0 else openai.NOT_GIVEN
+        self._tool_schemas = [t.schema() for t in self.tools] if len(self.tools) > 0 else openai.NOT_GIVEN
 
     @sync_compatible
     async def chat_continue(self) -> str:
@@ -39,6 +38,7 @@ class ChatBot:
             model = model_config.model_name,
             messages = [*self._system_prompts, *self.conversation],
             tools = self._tool_schemas,
+            tool_choice = "auto" if len(self.tools) > 0 else "none",
         )
         assistant_message = response.choices[0].message
 
