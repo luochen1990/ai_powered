@@ -38,7 +38,7 @@ class ChatBot:
             model = model_config.model_name,
             messages = [*self._system_prompts, *self.conversation],
             tools = self._tool_schemas,
-            tool_choice = "auto" if len(self.tools) > 0 else "none",
+            tool_choice = "auto" if len(self.tools) > 0 else openai.NOT_GIVEN,
         )
         assistant_message = response.choices[0].message
 
