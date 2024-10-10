@@ -15,12 +15,15 @@ Even so, you don't need to learn anything about the OpenAI SDK to achieve these 
 Features
 --------
 
-1. The `@ai_powered` decorator auto provide implementation for your python function with signature and docstring (call LLM underground)
-2. The `@make_tool` decorator turn your python function (with type annotations) into tools available by OpenAI API
-3. The `ChatBot` class can be inherited to create your own chatbot with tools empowered
-4. Full async support and sync compatible, use either style you want
-5. Strict type annotation (validated by pylance the strict mode)
-6. With unit test, and test coverage ratio is monitored
+1. The `@ai_powered` decorator which can auto provide an AI implementation for your python function
+2. Support [LLM Models](https://github.com/luochen1990/ai_powered/blob/master/src/ai_powered/llm/known_models.py) with or without tool_calls support
+3. Full async support and sync compatible (supported by [easy-sync](https://github.com/luochen1990/easy-sync)), use either style you want
+
+Code Quality Promise
+--------------------
+
+1. Strict type annotation (validated by pylance the strict mode)
+2. With full unit test cases, and test coverage ratio is monitored
 
 Usage
 ---
@@ -63,49 +66,26 @@ def extract_user_info(raw_text: str) -> UserInfo:
     ...
 ```
 
+And async function is also supported:
+
+```python
+@ai_powered
+async def add(a: int, b: int) -> int:
+    ...
+
+async def main():
+    print(await add(1, 1))
+```
+
+You can even call it in the sync context
+
+(this feature is supported by [easy-sync](https://github.com/luochen1990/easy-sync))
+
+```python
+print(add(1, 1).wait())
+```
+
 More examples can be found [here](/test/examples/ai_powered_decorator/)
-
-### `@make_tool` Decorator
-
-This decorator converts ordinary Python functions into tools that can be used by the [function calling](https://platform.openai.com/docs/guides/function-calling) feature of LLM.
-
-```python
-from ai_powered import make_tool
-import openai
-
-@make_tool
-def calculator(python_expression: str) -> str:
-    ''' Evaluate a Python expression (only support built-in functions), which can be used to solve mathematical problems. '''
-    return safe_eval(python_expression)
-
-client = openai.OpenAI()
-response = client.chat.completions.create(
-    model = "gpt-4o-mini",
-    messages = self.conversation,
-    tools = [ calculator.schema() ],
-    tool_choice = calculator.choice()
-)
-```
-
-### `ChatBot` 类
-
-This class implements an AI chatbot. You can inherit from it to create your own ChatBot subclass, specifying the system prompts and tools to use. It will help you handle the complex process of tool invocation.
-
-```python
-class MyChatBot (ChatBot):
-    system_prompt = '''
-    Please answer the user's questions. If any calculations are required, use the calculator available in the tool. It supports complex Python expressions. When using it, make sure to convert the user's mathematical expression to a valid Python expression. Do not use any undefined functions; if the user's expression includes function calls, convert them to Python's built-in functions or syntax.
-    '''
-    tools = (calculator,)
-
-if __name__ == "__main__":
-    bot = MyChatBot()
-    print(bot.chat('hello, please tell me the result of 2^10 + 3^4'))
-    print(bot.chat('and what is above result divided by 2?'))
-    print(f"{bot.conversation =}")
-```
-
-More examples can be found [here](/test/examples/chat_bot/)
 
 
 Current Limitations and Future Plans
