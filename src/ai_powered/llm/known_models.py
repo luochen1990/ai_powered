@@ -49,7 +49,8 @@ def equals(s: str) -> Callable[[str], bool]:
     ''' create a function to check if a string contains a substring '''
     return lambda text: s == text
 
-KNOWN_PLATFORMS : list[KnownPlatform] = [
+
+KNOWN_PLATFORMS: list[KnownPlatform] = [
     KnownPlatform(
         platform_name = "openai",
         match_platform_url = contains("openai"),
@@ -64,6 +65,13 @@ KNOWN_PLATFORMS : list[KnownPlatform] = [
         known_model_list = [
             KnownModel("deepseek-chat", {ModelFeature.tools}),
             KnownModel("deepseek-coder", {ModelFeature.tools}),
+        ]
+    ),
+    KnownPlatform(
+        platform_name = "moonshot",
+        match_platform_url = contains("moonshot"),
+        known_model_list = [
+            KnownModel("moonshot-v1-auto", {ModelFeature.tools}),
         ]
     ),
     KnownPlatform(
