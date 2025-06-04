@@ -14,18 +14,19 @@ from ai_powered.llm.connection import LlmConnection
 from ai_powered.llm.definitions import FunctionSimulator, ModelFeature
 from ai_powered.tool_call import ChatCompletionToolParam
 
+
 @dataclass
-class GenericFunctionSimulator (FunctionSimulator, ABC):
+class GenericFunctionSimulator(FunctionSimulator, ABC):
     ''' implementation of FunctionSimulator for OpenAI compatible models '''
 
     connection: LlmConnection
     model_name: str
     model_features: Set[ModelFeature]
     model_options: dict[str, Any]
-    system_prompt : str = field(init=False)
-    _param_tools : Iterable[ChatCompletionToolParam] | openai.NotGiven = field(init=False)
-    _param_tool_choice : ChatCompletionToolChoiceOptionParam | openai.NotGiven = field(init=False)
-    _param_response_format : ResponseFormat | openai.NotGiven = field(init=False)
+    system_prompt: str = field(init = False)
+    _param_tools: Iterable[ChatCompletionToolParam] | openai.NotGiven = field(init = False)
+    _param_tool_choice: ChatCompletionToolChoiceOptionParam | openai.NotGiven = field(init = False)
+    _param_response_format: ResponseFormat | openai.NotGiven = field(init = False)
 
     def __post_init__(self):
         self.system_prompt = self._system_prompt_maker()
@@ -64,13 +65,16 @@ class GenericFunctionSimulator (FunctionSimulator, ABC):
         ''' default impl is provided '''
         return await self.connection.chat_completions(
             model = self.model_name,
-            messages = [
-                {"role": "system", "content": self.system_prompt},
-                {"role": "user", "content": arguments_json}
-            ],
+            messages = [{
+                "role": "system",
+                "content": self.system_prompt
+            }, {
+                "role": "user",
+                "content": arguments_json
+            }],
             tools = self._param_tools,
             tool_choice = self._param_tool_choice,
-            response_format=self._param_response_format,
+            response_format = self._param_response_format,
         )
 
     def _response_message_parser(self, response_message: ChatCompletionMessage) -> str:

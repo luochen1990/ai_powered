@@ -1,5 +1,5 @@
-
 from typing import Any
+
 
 def deref(schema: dict[str, Any]) -> dict[str, Any]:
     '''

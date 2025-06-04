@@ -10,8 +10,9 @@ from ai_powered.llm.known_models import complete_model_config
 from ai_powered.llm.connection import LlmConnection
 from ai_powered.tool_call import MakeTool
 
-default_connection = LlmConnection(base_url=OPENAI_BASE_URL, api_key=OPENAI_API_KEY)
+default_connection = LlmConnection(base_url = OPENAI_BASE_URL, api_key = OPENAI_API_KEY)
 model_config = complete_model_config(OPENAI_BASE_URL, OPENAI_MODEL_NAME, OPENAI_MODEL_FEATURES)
+
 
 @dataclass
 class ChatBot:
@@ -42,7 +43,7 @@ class ChatBot:
         )
         assistant_message = response.choices[0].message
 
-        self.conversation.append(assistant_message.to_dict()) #type: ignore
+        self.conversation.append(assistant_message.to_dict())  #type: ignore
 
         tool_calls = assistant_message.tool_calls
         if tool_calls is not None:
@@ -51,7 +52,7 @@ class ChatBot:
 
             for tool_call in tool_calls:
                 using_tool = self._tool_dict[tool_call.function.name]
-                function_message = using_tool.call(tool_call) #type: ignore #TODO: async & parrallel
+                function_message = using_tool.call(tool_call)  #type: ignore #TODO: async & parrallel
                 self.conversation.append(function_message)
 
             return await self.chat_continue()

@@ -3,6 +3,7 @@ from typing import Optional
 
 _json_pattern = re.compile(r'({.*})', re.DOTALL)
 
+
 def extract_json_from_message(message: str) -> Optional[str]:
     reversed_message = message[::-1]
 

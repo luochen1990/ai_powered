@@ -5,7 +5,8 @@ from typing import Any, Optional
 
 from easy_sync import sync_compatible
 
-class ModelFeature (enum.Enum):
+
+class ModelFeature(enum.Enum):
     '''
     Ollama Doc: https://ollama.fan/reference/openai/#supported-features
     OpenAI Doc:
@@ -20,11 +21,12 @@ class ModelFeature (enum.Enum):
     structured_outputs = "structured_outputs"
     strict_mode = "strict_mode"
 
-ALL_FEATURES : set[ModelFeature] = {x for x in ModelFeature}
+
+ALL_FEATURES: set[ModelFeature] = {x for x in ModelFeature}
 
 
 @dataclass
-class FunctionSimulator (ABC):
+class FunctionSimulator(ABC):
     ''' just a wrapper to call model, without checking type correctness '''
 
     function_name: str

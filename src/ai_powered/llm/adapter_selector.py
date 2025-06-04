@@ -6,7 +6,7 @@ from ai_powered.llm.adapters.structured_output_adapter import StructuredOutputFu
 from ai_powered.llm.definitions import ModelFeature
 
 
-class FunctionSimulatorSelector (GenericFunctionSimulator):
+class FunctionSimulatorSelector(GenericFunctionSimulator):
     ''' implementation of FunctionSimulator for OpenAI compatible models '''
 
     _selected_impl: GenericFunctionSimulator
@@ -14,18 +14,18 @@ class FunctionSimulatorSelector (GenericFunctionSimulator):
     def _select_impl(self) -> GenericFunctionSimulator:
         if ModelFeature.structured_outputs in self.model_features:
             return StructuredOutputFunctionSimulator(
-                self.function_name, self.signature, self.docstring, self.parameters_schema, self.return_schema,
-                self.connection, self.model_name, self.model_features, self.model_options
+                self.function_name, self.signature, self.docstring, self.parameters_schema, self.return_schema, self.connection, self.model_name,
+                self.model_features, self.model_options
             )
         elif ModelFeature.tools in self.model_features:
             return ToolsFunctionSimulator(
-                self.function_name, self.signature, self.docstring, self.parameters_schema, self.return_schema,
-                self.connection, self.model_name, self.model_features, self.model_options
+                self.function_name, self.signature, self.docstring, self.parameters_schema, self.return_schema, self.connection, self.model_name,
+                self.model_features, self.model_options
             )
         else:
             return ChatFunctionSimulator(
-                self.function_name, self.signature, self.docstring, self.parameters_schema, self.return_schema,
-                self.connection, self.model_name, self.model_features, self.model_options
+                self.function_name, self.signature, self.docstring, self.parameters_schema, self.return_schema, self.connection, self.model_name,
+                self.model_features, self.model_options
             )
 
     def __post_init__(self):

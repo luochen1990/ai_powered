@@ -14,8 +14,9 @@ from ai_powered.schema_deref import deref
 P = ParamSpec("P")
 R = TypeVar("R")
 
+
 class MakeTool(msgspec.Struct, Generic[P, R]):
-    fn : Callable[P, R]
+    fn: Callable[P, R]
 
     def __call__(self, *args: P.args, **kwds: P.kwargs) -> R:
         return self.fn(*args, **kwds)
@@ -57,8 +58,8 @@ class MakeTool(msgspec.Struct, Generic[P, R]):
         assert self.fn.__name__ == tool_call.function.name
 
         sig = inspect.signature(self.fn)
-        args_json : str = tool_call.function.arguments
-        args_obj = msgspec.json.decode(args_json, type=self.struct_of_parameters())
+        args_json: str = tool_call.function.arguments
+        args_obj = msgspec.json.decode(args_json, type = self.struct_of_parameters())
         args_dict = msgspec.structs.asdict(args_obj)
 
         if DEBUG:
@@ -66,23 +67,15 @@ class MakeTool(msgspec.Struct, Generic[P, R]):
 
         args = sig.bind(**args_dict).args
 
-        function_response = self.fn(*args) #type: ignore
+        function_response = self.fn(*args)  #type: ignore
 
         # 构建函数结果消息对象
-        return {
-            "role": "tool",
-            "tool_call_id": tool_call.id,
-            "content": msgspec.json.encode(function_response).decode('utf-8')
-        }
+        return {"role": "tool", "tool_call_id": tool_call.id, "content": msgspec.json.encode(function_response).decode('utf-8')}
 
     def choice(self) -> ChatCompletionNamedToolChoiceParam:
         function_name = self.fn.__name__
-        return {
-            "type": "function",
-            "function": {
-                "name": function_name
-            }
-        }
+        return {"type": "function", "function": {"name": function_name}}
+
 
 def make_tool(fn: Callable[P, R]) -> MakeTool[P, R]:
     ''' Create a tool available for AI from a function '''

@@ -16,21 +16,27 @@ from ai_powered.colors import gray, green
 import inspect
 
 A = TypeVar("A")
-class Result (msgspec.Struct, Generic[A]):
+
+
+class Result(msgspec.Struct, Generic[A]):
     result: A
+
 
 P = ParamSpec("P")
 R = TypeVar("R")
+
 
 @overload
 def ai_powered(fn: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
     ...
 
+
 @overload
 def ai_powered(fn: Callable[P, R]) -> Callable[P, R]:
     ...
 
-def ai_powered(fn : Callable[P, Awaitable[R]] | Callable[P, R]) -> Callable[P, Awaitable[R]] | Callable[P, R]:
+
+def ai_powered(fn: Callable[P, Awaitable[R]] | Callable[P, R]) -> Callable[P, Awaitable[R]] | Callable[P, R]:
     ''' Provide an AI powered implementation of a function '''
 
     function_name = fn.__name__
@@ -57,7 +63,7 @@ def ai_powered(fn : Callable[P, Awaitable[R]] | Callable[P, R]) -> Callable[P, A
             print(f"{param_name} (json schema): {schema}")
         print(f"return (json schema): {return_schema}")
 
-    connection = LlmConnection(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
+    connection = LlmConnection(api_key = OPENAI_API_KEY, base_url = OPENAI_BASE_URL)
     model_config = complete_model_config(OPENAI_BASE_URL, OPENAI_MODEL_NAME, OPENAI_MODEL_FEATURES)
     model_name = model_config.model_name
     model_features: set[ModelFeature] = model_config.supported_features
@@ -67,17 +73,17 @@ def ai_powered(fn : Callable[P, Awaitable[R]] | Callable[P, R]) -> Callable[P, A
         signature = sig,
         docstring = docstring or "no doc, guess intention from function name",
         parameters_schema = json.dumps(parameters_schema),
-    ) + ("" if ModelFeature.tools in model_features else SYSTEM_PROMPT_RETURN_SCHEMA.format(
-        return_schema = json.dumps(return_schema),
-    ) + SYSTEM_PROMPT_JSON_SYNTAX )
+    ) + (
+        "" if ModelFeature.tools in model_features else SYSTEM_PROMPT_RETURN_SCHEMA.format(return_schema = json.dumps(return_schema),) +
+        SYSTEM_PROMPT_JSON_SYNTAX
+    )
 
     if DEBUG:
         print(f"{sys_prompt =}")
         print(f"{return_schema =}")
 
     fn_simulator = FunctionSimulatorSelector(
-        function_name, f"{sig}", docstring, parameters_schema, return_schema,
-        connection, model_name, model_features, model_options
+        function_name, f"{sig}", docstring, parameters_schema, return_schema, connection, model_name, model_features, model_options
     )
 
     if DEBUG:
@@ -98,12 +104,12 @@ def ai_powered(fn : Callable[P, Awaitable[R]] | Callable[P, R]) -> Callable[P, A
             print(f"{resp_str =}")
             print(green(f"[fn {function_name}] response extracted."))
 
-        returned_result = msgspec.json.decode(resp_str, type=result_type)
+        returned_result = msgspec.json.decode(resp_str, type = result_type)
         if DEBUG:
             print(f"{returned_result =}")
             print(green(f"[fn {function_name}] response validated."))
 
-        return returned_result.result #type: ignore
+        return returned_result.result  #type: ignore
 
     @wraps(fn)
     @sync_compatible
@@ -121,13 +127,12 @@ def ai_powered(fn : Callable[P, Awaitable[R]] | Callable[P, R]) -> Callable[P, A
             print(f"{resp_str =}")
             print(green(f"[fn {function_name}] response extracted."))
 
-        returned_result = msgspec.json.decode(resp_str, type=result_type)
+        returned_result = msgspec.json.decode(resp_str, type = result_type)
         if DEBUG:
             print(f"{returned_result =}")
             print(green(f"[fn {function_name}] response validated."))
 
-        return returned_result.result #type: ignore
-
+        return returned_result.result  #type: ignore
 
     if asyncio.iscoroutinefunction(fn):
         return wrapper_fn_async
