@@ -1,14 +1,15 @@
-import openai
-from openai.types.chat.chat_completion_message import ChatCompletionMessage
-from openai.types.chat.completion_create_params import ResponseFormat
+from typing import Any
+from litellm import BaseModel, ChatCompletionResponseMessage
 from ai_powered.llm.adapters.generic_adapter import GenericFunctionSimulator
 #from ai_powered.llm.definitions import ModelFeature
+
+ResponseFormat = dict[str, Any] | type[BaseModel] | None
 
 
 class StructuredOutputFunctionSimulator(GenericFunctionSimulator):
     ''' implementation of FunctionSimulator for OpenAI compatible models '''
 
-    def _param_response_format_maker(self) -> ResponseFormat | openai.NotGiven:
+    def _param_response_format_maker(self) -> ResponseFormat:
         ''' to be overrided '''
         return {
             "type": "json_schema",
@@ -26,11 +27,11 @@ class StructuredOutputFunctionSimulator(GenericFunctionSimulator):
                 }
         }
 
-    def _response_message_parser(self, response_message: ChatCompletionMessage) -> str:
-        tool_calls = response_message.tool_calls
-        assert tool_calls is None
+    def _response_message_parser(self, response_message: ChatCompletionResponseMessage) -> str:
+        assert "tool_calls" not in response_message
 
-        raw_resp_str = response_message.content
+        assert "content" in response_message
+        raw_resp_str = response_message["content"]
         assert raw_resp_str is not None
 
         return raw_resp_str

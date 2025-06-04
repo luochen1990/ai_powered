@@ -9,9 +9,9 @@ include = ["src"]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<4"
-openai = "^1.83.0"
 msgspec = "^0.19.0"
 easy-sync = "^0.2.2"
+litellm = "^1.72.0"
 
 [tool.poetry.group.test.dependencies]
 pytest = "^8.4.0"

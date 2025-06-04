@@ -2,14 +2,11 @@ from functools import partial
 from typing import Any, Mapping, Union
 from easy_sync import Waitable, sync_compatible
 import httpx
-import openai
-from openai.types.chat.chat_completion import ChatCompletion
+import litellm
 from ai_powered.utils.function_wraps import wraps_method_arguments_type
 
 
 class LlmConnection:
-    sync_client: openai.OpenAI
-    async_client: openai.AsyncOpenAI
     base_url: str | httpx.URL | None
 
     def __init__(
@@ -18,45 +15,42 @@ class LlmConnection:
         organization: str | None = None,
         project: str | None = None,
         base_url: str | httpx.URL | None = None,
-        timeout: Union[float, httpx.Timeout, None, openai.NotGiven] = openai.NOT_GIVEN,
-        max_retries: int = openai.DEFAULT_MAX_RETRIES,
+        timeout: Union[float, httpx.Timeout, None] = None,
+        max_retries: int = 2,
         default_headers: Mapping[str, str] | None = None,
         default_query: Mapping[str, object] | None = None,
         sync_http_client: httpx.Client | None = None,
         async_http_client: httpx.AsyncClient | None = None,
     ):
         self.base_url = base_url
+        self._sync_kwargs = {
+            'api_key': api_key,
+            'base_url': str(base_url) if base_url is not None else None,
+            'timeout': float(timeout) if isinstance(timeout, (int, float)) else None,
+            'max_retries': max_retries,
+            'headers': default_headers,
+            'query_params': default_query,
+        }
+        self._async_kwargs = self._sync_kwargs.copy()
+        self._sync_fn = litellm.completion
+        self._async_fn = litellm.acompletion
+        self._chat_completions = sync_compatible(sync_fn = self._sync_completion)(self._async_completion)
 
-        self.sync_client = openai.OpenAI(
-            api_key = api_key,
-            organization = organization,
-            project = project,
-            base_url = base_url,
-            timeout = timeout,
-            max_retries = max_retries,
-            default_headers = default_headers,
-            default_query = default_query,
-            http_client = sync_http_client,
-        )
+    def _sync_completion(self, *args: Any, **kwargs: dict[str, Any]) -> Any:
+        call_kwargs = self._sync_kwargs.copy()
+        call_kwargs.update(kwargs)
+        # Remove response_format if it's None or NOT_GIVEN to avoid litellm TypeError
+        if 'response_format' in call_kwargs and (call_kwargs['response_format'] is None or str(call_kwargs['response_format']) == 'NOT_GIVEN'):
+            del call_kwargs['response_format']
+        return self._sync_fn(*args, **call_kwargs)
 
-        self.async_client = openai.AsyncOpenAI(
-            api_key = api_key,
-            organization = organization,
-            project = project,
-            base_url = base_url,
-            timeout = timeout,
-            max_retries = max_retries,
-            default_headers = default_headers,
-            default_query = default_query,
-            http_client = async_http_client,
-        )
+    async def _async_completion(self, *args: Any, **kwargs: dict[str, Any]) -> Any:
+        call_kwargs = self._async_kwargs.copy()
+        call_kwargs.update(kwargs)
+        if 'response_format' in call_kwargs and (call_kwargs['response_format'] is None or str(call_kwargs['response_format']) == 'NOT_GIVEN'):
+            del call_kwargs['response_format']
+        return await self._async_fn(*args, **call_kwargs)
 
-        async_fn = partial(self.async_client.chat.completions.create, stream = False)
-        sync_fn = partial(self.sync_client.chat.completions.create, stream = False)
-
-        f = sync_compatible(sync_fn = sync_fn)(async_fn)  #type: ignore
-        self._chat_completions = f
-
-    @wraps_method_arguments_type(openai.AsyncOpenAI().chat.completions.create)
-    def chat_completions(self, *args: list[Any], **kwargs: dict[str, Any]) -> Waitable[ChatCompletion]:
+    @wraps_method_arguments_type(litellm.completion)
+    def chat_completions(self, *args: Any, **kwargs: dict[str, Any]) -> Waitable[Any]:
         return self._chat_completions(*args, **kwargs)

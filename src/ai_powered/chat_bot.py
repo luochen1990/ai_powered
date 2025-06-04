@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from typing import Any, ClassVar
 import openai
 from easy_sync import sync_compatible
-from openai.types.chat.chat_completion_message_param import ChatCompletionMessageParam
+from litellm import GenericChatCompletionMessage
 
 from ai_powered.colors import gray
 from ai_powered.constants import DEBUG, OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL_NAME, OPENAI_MODEL_FEATURES
@@ -21,11 +21,11 @@ class ChatBot:
     system_prompts: ClassVar[list[str]] = []
     tools: ClassVar[tuple[MakeTool[..., Any], ...]] = ()
     connection: ClassVar[LlmConnection] = default_connection
-    conversation: list[ChatCompletionMessageParam] = field(default_factory = lambda: [])
+    conversation: list[GenericChatCompletionMessage] = field(default_factory = lambda: [])
 
     def __post_init__(self):
         self._tool_dict = {tool.fn.__name__: tool for tool in self.tools}
-        self._tool_schemas = [t.schema() for t in self.tools] if len(self.tools) > 0 else openai.NOT_GIVEN
+        self._tool_schemas = [t.schema() for t in self.tools] if len(self.tools) > 0 else None
 
     @sync_compatible
     async def chat_continue(self) -> str:
@@ -33,13 +33,13 @@ class ChatBot:
             print(gray(f"{self.conversation =}"))
 
         # NOTE: system_prompts might be updated dynamically
-        self._system_prompts: list[ChatCompletionMessageParam] = [{"role": "system", "content": s} for s in self.system_prompts]
+        self._system_prompts: list[GenericChatCompletionMessage] = [{"role": "system", "content": s} for s in self.system_prompts]
 
         response = await self.connection.chat_completions(
             model = model_config.model_name,
             messages = [*self._system_prompts, *self.conversation],
             tools = self._tool_schemas,
-            tool_choice = "auto" if len(self.tools) > 0 else openai.NOT_GIVEN,
+            tool_choice = "auto" if len(self.tools) > 0 else None,
         )
         assistant_message = response.choices[0].message
 
@@ -53,7 +53,7 @@ class ChatBot:
             for tool_call in tool_calls:
                 using_tool = self._tool_dict[tool_call.function.name]
                 function_message = using_tool.call(tool_call)  #type: ignore #TODO: async & parrallel
-                self.conversation.append(function_message)
+                self.conversation.append(function_message)  #type: ignore
 
             return await self.chat_continue()
         else:

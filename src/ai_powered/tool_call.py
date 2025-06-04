@@ -3,10 +3,7 @@ from typing import Callable, Generic
 from typing_extensions import ParamSpec, TypeVar
 import msgspec
 
-from openai.types.chat.chat_completion_tool_param import ChatCompletionToolParam
-from openai.types.chat.chat_completion_named_tool_choice_param import ChatCompletionNamedToolChoiceParam
-from openai.types.chat.chat_completion_tool_message_param import ChatCompletionToolMessageParam
-from openai.types.chat.chat_completion_message_tool_call import ChatCompletionMessageToolCall
+from litellm import ChatCompletionToolParam, ChatCompletionMessageToolCall, ChatCompletionToolMessage, ChatCompletionNamedToolChoiceParam
 from ai_powered.colors import gray, green
 from ai_powered.constants import DEBUG
 from ai_powered.schema_deref import deref
@@ -51,7 +48,7 @@ class MakeTool(msgspec.Struct, Generic[P, R]):
             }
         }
 
-    def call(self, tool_call: ChatCompletionMessageToolCall) -> ChatCompletionToolMessageParam:
+    def call(self, tool_call: ChatCompletionMessageToolCall) -> ChatCompletionToolMessage:
         if DEBUG:
             print(green(f"[MakeTool.call()] {tool_call =}"))
 

@@ -1,18 +1,16 @@
 from abc import ABC
 from dataclasses import dataclass, field
 import json
-from typing import Any, Iterable, Set
+from typing import Any, Set, TypeAlias
 from easy_sync import sync_compatible
-import openai
-from openai.types.chat.chat_completion_message import ChatCompletionMessage
-from openai.types.chat.chat_completion_tool_choice_option_param import ChatCompletionToolChoiceOptionParam
-from openai.types.chat.chat_completion import ChatCompletion
-from openai.types.chat.completion_create_params import ResponseFormat
+from litellm import BaseModel, ChatCompletionToolParam, ChatCompletionResponseMessage, ChatCompletionToolChoiceObjectParam
+
 from ai_powered.colors import green, red, yellow
 from ai_powered.constants import DEBUG, SYSTEM_PROMPT
 from ai_powered.llm.connection import LlmConnection
 from ai_powered.llm.definitions import FunctionSimulator, ModelFeature
-from ai_powered.tool_call import ChatCompletionToolParam
+
+ResponseFormat: TypeAlias = dict[str, Any] | type[BaseModel] | None
 
 
 @dataclass
@@ -24,9 +22,9 @@ class GenericFunctionSimulator(FunctionSimulator, ABC):
     model_features: Set[ModelFeature]
     model_options: dict[str, Any]
     system_prompt: str = field(init = False)
-    _param_tools: Iterable[ChatCompletionToolParam] | openai.NotGiven = field(init = False)
-    _param_tool_choice: ChatCompletionToolChoiceOptionParam | openai.NotGiven = field(init = False)
-    _param_response_format: ResponseFormat | openai.NotGiven = field(init = False)
+    _param_tools: list[ChatCompletionToolParam] | None = field(init = False)
+    _param_tool_choice: ChatCompletionToolChoiceObjectParam | None = field(init = False)
+    _param_response_format: ResponseFormat = field(init = False)
 
     def __post_init__(self):
         self.system_prompt = self._system_prompt_maker()
@@ -48,20 +46,20 @@ class GenericFunctionSimulator(FunctionSimulator, ABC):
         ''' to be overrided '''
         return ""
 
-    def _param_response_format_maker(self) -> ResponseFormat | openai.NotGiven:
+    def _param_response_format_maker(self) -> ResponseFormat:
         ''' to be overrided '''
-        return openai.NOT_GIVEN
+        return None
 
-    def _param_tools_maker(self) -> Iterable[ChatCompletionToolParam] | openai.NotGiven:
+    def _param_tools_maker(self) -> list[ChatCompletionToolParam] | None:
         ''' to be overrided '''
-        return openai.NOT_GIVEN
+        return None
 
-    def _param_tool_choice_maker(self) -> ChatCompletionToolChoiceOptionParam | openai.NotGiven:
+    def _param_tool_choice_maker(self) -> ChatCompletionToolChoiceObjectParam | None:
         ''' to be overrided '''
-        return openai.NOT_GIVEN
+        return None
 
     @sync_compatible
-    async def _chat_completion_query(self, arguments_json: str) -> ChatCompletion:
+    async def _chat_completion_query(self, arguments_json: str) -> Any:
         ''' default impl is provided '''
         return await self.connection.chat_completions(
             model = self.model_name,
@@ -73,11 +71,11 @@ class GenericFunctionSimulator(FunctionSimulator, ABC):
                 "content": arguments_json
             }],
             tools = self._param_tools,
-            tool_choice = self._param_tool_choice,
+            tool_choice = self._param_tool_choice,  #type: ignore
             response_format = self._param_response_format,
         )
 
-    def _response_message_parser(self, response_message: ChatCompletionMessage) -> str:
+    def _response_message_parser(self, response_message: ChatCompletionResponseMessage) -> str:
         ''' to be overrided '''
         if DEBUG:
             print(red(f"[GenericFunctionSimulator._response_message_parser()] {self.__class__ =}, {self._response_message_parser =}"))

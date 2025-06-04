@@ -1,6 +1,6 @@
 import json
 import re
-from openai.types.chat.chat_completion_message import ChatCompletionMessage
+from litellm import ChatCompletionResponseMessage
 from ai_powered.constants import DEBUG, SYSTEM_PROMPT_JSON_SYNTAX, SYSTEM_PROMPT_RETURN_SCHEMA
 from ai_powered.llm.adapters.generic_adapter import GenericFunctionSimulator
 from ai_powered.utils.parse_message import extract_json_from_message
@@ -14,13 +14,16 @@ class ChatFunctionSimulator(GenericFunctionSimulator):
     def _extra_system_prompt_maker(self) -> str:
         return SYSTEM_PROMPT_RETURN_SCHEMA.format(return_schema = json.dumps(self.return_schema),) + SYSTEM_PROMPT_JSON_SYNTAX
 
-    def _response_message_parser(self, response_message: ChatCompletionMessage) -> str:
-        tool_calls = response_message.tool_calls
+    def _response_message_parser(self, response_message: ChatCompletionResponseMessage) -> str:
+        tool_calls = response_message.tool_calls  # type: ignore
 
         if tool_calls is not None:
-            return tool_calls[0].function.arguments
+            tc0 = tool_calls[0]
+            tc0fn = tc0.function
+            return tc0fn.arguments
         else:
-            raw_resp_str = response_message.content
+            assert "content" in response_message, f"response message content not found in {response_message =}"
+            raw_resp_str = response_message.content  # type: ignore
             assert raw_resp_str is not None
 
             if DEBUG:
