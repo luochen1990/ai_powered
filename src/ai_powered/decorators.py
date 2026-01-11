@@ -41,6 +41,8 @@ def ai_powered(fn: Callable[P, Awaitable[R]] | Callable[P, R]) -> Callable[P, Aw
 
     function_name = fn.__name__
     sig = inspect.signature(fn)
+    # Construct full signature including function name
+    full_signature = f"def {function_name}{sig}"
     docstring = inspect.getdoc(fn)
 
     if DEBUG:
@@ -70,7 +72,7 @@ def ai_powered(fn: Callable[P, Awaitable[R]] | Callable[P, R]) -> Callable[P, Aw
     model_options: dict[str, Any] = model_config.suggested_options
 
     sys_prompt = SYSTEM_PROMPT.format(
-        signature = sig,
+        signature = full_signature,
         docstring = docstring or "no doc, guess intention from function name",
         parameters_schema = json.dumps(parameters_schema),
     ) + (
@@ -83,7 +85,7 @@ def ai_powered(fn: Callable[P, Awaitable[R]] | Callable[P, R]) -> Callable[P, Aw
         print(f"{return_schema =}")
 
     fn_simulator = FunctionSimulatorSelector(
-        function_name, f"{sig}", docstring, parameters_schema, return_schema, connection, model_name, model_features, model_options
+        function_name, full_signature, docstring, parameters_schema, return_schema, connection, model_name, model_features, model_options
     )
 
     if DEBUG:

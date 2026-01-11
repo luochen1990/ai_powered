@@ -63,6 +63,9 @@ class GenericFunctionSimulator(FunctionSimulator, ABC):
     @sync_compatible
     async def _chat_completion_query(self, arguments_json: str) -> ChatCompletion:
         ''' default impl is provided '''
+        if DEBUG:
+            print(f"{self._param_response_format =}")
+
         return await self.connection.chat_completions(
             model = self.model_name,
             messages = [{
