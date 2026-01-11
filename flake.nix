@@ -2,7 +2,7 @@
   description = "A Python development environment with poetry";
 
   inputs = {
-    nixpkgs.url = "nixpkgs";
+    nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
     easy-sync.url = "github:luochen1990/easy-sync/master";
     easy-sync.inputs.nixpkgs.follows = "nixpkgs";
   };
