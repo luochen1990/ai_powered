@@ -8,7 +8,7 @@ from ai_powered.llm.adapters.generic_adapter import GenericFunctionSimulator
 class StructuredOutputFunctionSimulator(GenericFunctionSimulator):
     ''' implementation of FunctionSimulator for OpenAI compatible models '''
 
-    def _param_response_format_maker(self) -> ResponseFormat | openai.NotGiven:
+    def _param_response_format_maker(self) -> ResponseFormat | openai.Omit:
         ''' to be overrided '''
         return {
             "type": "json_schema",

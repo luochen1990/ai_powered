@@ -24,9 +24,9 @@ class GenericFunctionSimulator(FunctionSimulator, ABC):
     model_features: Set[ModelFeature]
     model_options: dict[str, Any]
     system_prompt: str = field(init = False)
-    _param_tools: Iterable[ChatCompletionToolParam] | openai.NotGiven = field(init = False)
-    _param_tool_choice: ChatCompletionToolChoiceOptionParam | openai.NotGiven = field(init = False)
-    _param_response_format: ResponseFormat | openai.NotGiven = field(init = False)
+    _param_tools: Iterable[ChatCompletionToolParam] | openai.Omit = field(init = False)
+    _param_tool_choice: ChatCompletionToolChoiceOptionParam | openai.Omit = field(init = False)
+    _param_response_format: ResponseFormat | openai.Omit = field(init = False)
 
     def __post_init__(self):
         self.system_prompt = self._system_prompt_maker()
@@ -48,17 +48,17 @@ class GenericFunctionSimulator(FunctionSimulator, ABC):
         ''' to be overrided '''
         return ""
 
-    def _param_response_format_maker(self) -> ResponseFormat | openai.NotGiven:
+    def _param_response_format_maker(self) -> ResponseFormat | openai.Omit:
         ''' to be overrided '''
-        return openai.NOT_GIVEN
+        return openai.omit
 
-    def _param_tools_maker(self) -> Iterable[ChatCompletionToolParam] | openai.NotGiven:
+    def _param_tools_maker(self) -> Iterable[ChatCompletionToolParam] | openai.Omit:
         ''' to be overrided '''
-        return openai.NOT_GIVEN
+        return openai.omit
 
-    def _param_tool_choice_maker(self) -> ChatCompletionToolChoiceOptionParam | openai.NotGiven:
+    def _param_tool_choice_maker(self) -> ChatCompletionToolChoiceOptionParam | openai.Omit:
         ''' to be overrided '''
-        return openai.NOT_GIVEN
+        return openai.omit
 
     @sync_compatible
     async def _chat_completion_query(self, arguments_json: str) -> ChatCompletion:

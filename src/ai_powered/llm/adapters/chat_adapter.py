@@ -1,6 +1,7 @@
 import json
 import re
 from openai.types.chat.chat_completion_message import ChatCompletionMessage
+from openai.types.chat.chat_completion_message_function_tool_call import ChatCompletionMessageFunctionToolCall
 from ai_powered.constants import DEBUG, SYSTEM_PROMPT_JSON_SYNTAX, SYSTEM_PROMPT_RETURN_SCHEMA
 from ai_powered.llm.adapters.generic_adapter import GenericFunctionSimulator
 from ai_powered.utils.parse_message import extract_json_from_message
@@ -17,7 +18,7 @@ class ChatFunctionSimulator(GenericFunctionSimulator):
     def _response_message_parser(self, response_message: ChatCompletionMessage) -> str:
         tool_calls = response_message.tool_calls
 
-        if tool_calls is not None:
+        if tool_calls is not None and isinstance(tool_calls[0], ChatCompletionMessageFunctionToolCall):
             return tool_calls[0].function.arguments
         else:
             raw_resp_str = response_message.content

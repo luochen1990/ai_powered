@@ -1,6 +1,7 @@
 from typing import Iterable
 import openai
 from openai.types.chat.chat_completion_message import ChatCompletionMessage
+from openai.types.chat.chat_completion_message_function_tool_call import ChatCompletionMessageFunctionToolCall
 from openai.types.chat.chat_completion_tool_choice_option_param import ChatCompletionToolChoiceOptionParam
 from ai_powered.tool_call import ChatCompletionToolParam
 from ai_powered.llm.adapters.generic_adapter import GenericFunctionSimulator
@@ -10,7 +11,7 @@ from ai_powered.utils.parse_message import extract_json_from_message
 class ToolsFunctionSimulator(GenericFunctionSimulator):
     ''' implementation of FunctionSimulator for OpenAI compatible models '''
 
-    def _param_tools_maker(self) -> Iterable[ChatCompletionToolParam] | openai.NotGiven:
+    def _param_tools_maker(self) -> Iterable[ChatCompletionToolParam] | openai.Omit:
         return [
             {
                 "type": "function",
@@ -28,14 +29,14 @@ class ToolsFunctionSimulator(GenericFunctionSimulator):
             }
         ]
 
-    def _param_tool_choice_maker(self) -> ChatCompletionToolChoiceOptionParam | openai.NotGiven:
+    def _param_tool_choice_maker(self) -> ChatCompletionToolChoiceOptionParam | openai.Omit:
         return {"type": "function", "function": {"name": "return_result"}}
 
     #@override
     def _response_message_parser(self, response_message: ChatCompletionMessage) -> str:
         tool_calls = response_message.tool_calls
 
-        if tool_calls is not None:
+        if tool_calls is not None and isinstance(tool_calls[0], ChatCompletionMessageFunctionToolCall):
             return tool_calls[0].function.arguments
         else:  # 兼容不支持 tool_choice 的情况, 比如 ollama
             message = response_message.content

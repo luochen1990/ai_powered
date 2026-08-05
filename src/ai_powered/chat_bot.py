@@ -3,6 +3,8 @@ from typing import Any, ClassVar
 import openai
 from easy_sync import sync_compatible
 from openai.types.chat.chat_completion_message_param import ChatCompletionMessageParam
+from openai.types.chat.chat_completion_message_function_tool_call import ChatCompletionMessageFunctionToolCall
+from openai.types.chat.chat_completion_tool_param import ChatCompletionToolParam
 
 from ai_powered.colors import gray
 from ai_powered.constants import DEBUG, OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL_NAME, OPENAI_MODEL_FEATURES
@@ -25,7 +27,7 @@ class ChatBot:
 
     def __post_init__(self):
         self._tool_dict = {tool.fn.__name__: tool for tool in self.tools}
-        self._tool_schemas = [t.schema() for t in self.tools] if len(self.tools) > 0 else openai.NOT_GIVEN
+        self._tool_schemas: list[ChatCompletionToolParam] | openai.Omit = [t.schema() for t in self.tools] if len(self.tools) > 0 else openai.omit
 
     @sync_compatible
     async def chat_continue(self) -> str:
@@ -39,7 +41,7 @@ class ChatBot:
             model = model_config.model_name,
             messages = [*self._system_prompts, *self.conversation],
             tools = self._tool_schemas,
-            tool_choice = "auto" if len(self.tools) > 0 else openai.NOT_GIVEN,
+            tool_choice = "auto" if len(self.tools) > 0 else openai.omit,
         )
         assistant_message = response.choices[0].message
 
@@ -51,6 +53,8 @@ class ChatBot:
                 print(gray(f"{len(tool_calls) =}"))
 
             for tool_call in tool_calls:
+                if not isinstance(tool_call, ChatCompletionMessageFunctionToolCall):
+                    continue  # 仅处理 function 类型的 tool call, 忽略 custom 类型 (如 MCP 工具)
                 using_tool = self._tool_dict[tool_call.function.name]
                 function_message = using_tool.call(tool_call)  #type: ignore #TODO: async & parrallel
                 self.conversation.append(function_message)
