@@ -26,14 +26,36 @@ def deref(schema: dict[str, Any]) -> dict[str, Any]:
 
     defs = schema.get("$defs", {})
 
+    # JSON Schema 中可能出现子 schema (含 $ref) 的容器键, 按值的形态分两类:
+    # - 单 schema 形态: 值本身就是一个 schema (dict 或 bool, 如 "items": false)
+    #   - items: array 元素
+    #   - additionalProperties: map 值
+    # - dict[str, schema] 形态: 值是属性名到 schema 的映射
+    #   - properties: 对象属性
+    # - list[schema] 形态: 值是 schema 列表
+    #   - prefixItems: 定长 tuple 元素
+    #   - anyOf / oneOf / allOf: 组合
+    # 只对这些键递归, 避免误处理 title/description/required 等非 schema 值.
+    single_schema_keys = ("items", "additionalProperties")
+    dict_schema_keys = ("properties",)
+    list_schema_keys = ("prefixItems", "anyOf", "oneOf", "allOf")
+
     def _deref(schema: dict[str, Any]) -> dict[str, Any]:
         if '$ref' in schema:
             ref_name = schema["$ref"].split('/')[-1]
             return _deref(defs[ref_name])
-        elif 'properties' in schema:
-            properties = {key: _deref(value) for key, value in schema['properties'].items()}
-            return schema | {"properties": properties}
-        else:
-            return schema
+        result = dict(schema)
+        for key in single_schema_keys:
+            if isinstance(result.get(key), dict):
+                result[key] = _deref(result[key])
+        for key in dict_schema_keys:
+            value = result.get(key)
+            if isinstance(value, dict):
+                result[key] = {k: _deref(v) for k, v in value.items()}
+        for key in list_schema_keys:
+            value = result.get(key)
+            if isinstance(value, list):
+                result[key] = [_deref(v) if isinstance(v, dict) else v for v in value]
+        return result
 
     return _deref(schema)
