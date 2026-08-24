@@ -36,3 +36,11 @@ export OPENAI_MODEL_FEATURES=
 this tells `ai-powered` to use normal chat mode to get a structured response.
 
 All features definition can be found [here](/src/ai_powered/llm/definitions.py)
+
+### pass extra body parameters to the LLM gateway/provider:
+
+```shell
+export OPENAI_EXTRA_BODY='{"reasoning": {"enabled": false}, "temperature": 0}'
+```
+
+this tells `ai-powered` to merge these fields into the top level of every request body (via the openai SDK's `extra_body`), useful for provider-specific parameters like OpenRouter's `reasoning` switch. Unset means no extra body is sent.

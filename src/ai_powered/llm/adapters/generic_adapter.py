@@ -9,7 +9,7 @@ from openai.types.chat.chat_completion_tool_choice_option_param import ChatCompl
 from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.completion_create_params import ResponseFormat
 from ai_powered.colors import green, red, yellow
-from ai_powered.constants import DEBUG, SYSTEM_PROMPT
+from ai_powered.constants import DEBUG, OPENAI_EXTRA_BODY, SYSTEM_PROMPT
 from ai_powered.llm.connection import LlmConnection
 from ai_powered.llm.definitions import FunctionSimulator, ModelFeature
 from ai_powered.tool_call import ChatCompletionToolParam
@@ -66,6 +66,11 @@ class GenericFunctionSimulator(FunctionSimulator, ABC):
         if DEBUG:
             print(f"{self._param_response_format =}")
 
+        # NOTE: extra_body 直传 None 表示 "不发" (openai SDK 对该参数是 None 门控,
+        # 与 tools 等 NotGiven 门控参数不同 —— 后者才用 openai.omit; 误传 omit 会在
+        # 未设 OPENAI_EXTRA_BODY 的默认路径上以 TypeError 崩溃, 且经
+        # wraps_method_arguments_type 包装的调用不受 pyright 强制检查, 类型系统拦不住).
+        # 网关 200+error 防御在 LlmConnection 咽喉点 (见 connection.py).
         return await self.connection.chat_completions(
             model = self.model_name,
             messages = [{
@@ -78,6 +83,7 @@ class GenericFunctionSimulator(FunctionSimulator, ABC):
             tools = self._param_tools,
             tool_choice = self._param_tool_choice,
             response_format = self._param_response_format,
+            extra_body = OPENAI_EXTRA_BODY,
         )
 
     def _response_message_parser(self, response_message: ChatCompletionMessage) -> str:

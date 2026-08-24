@@ -1,10 +1,21 @@
 from functools import partial
-from typing import Any, Mapping, Union
+from typing import Any, Mapping, Union, cast
 from easy_sync import Waitable, sync_compatible
 import httpx
 import openai
 from openai.types.chat.chat_completion import ChatCompletion
 from ai_powered.utils.function_wraps import wraps_method_arguments_type
+
+
+def _guard_gateway_error(response: ChatCompletion) -> ChatCompletion:
+    ''' 网关防御 (decorator 与 chat_bot 两路径的公共咽喉点): OpenRouter 等网关偶发以
+    HTTP 200 + body.error 透传上游故障 (如 503 overloaded), 此时 choices 为 None
+    (openai client 内置重试只认非 2xx, 不覆盖此形态), 不拦截会在调用方的
+    choices[0] 处爆出 opaque 的 TypeError. '''
+    if response.choices is None:
+        error = response.model_extra.get('error') if response.model_extra else None
+        raise RuntimeError(f"LLM gateway returned error in 200 response: {error}")
+    return response
 
 
 class LlmConnection:
@@ -54,7 +65,14 @@ class LlmConnection:
         async_fn = partial(self.async_client.chat.completions.create, stream = False)
         sync_fn = partial(self.sync_client.chat.completions.create, stream = False)
 
-        f = sync_compatible(sync_fn = sync_fn)(async_fn)  #type: ignore
+        async def async_chat_completions(**kwargs: Any) -> ChatCompletion:
+            # cast 收窄: stream=False 已在 partial 钉死, create 重载的 Stream 分支不可达 (类型系统不追踪 partial 参数)
+            return _guard_gateway_error(cast(ChatCompletion, await async_fn(**kwargs)))
+
+        def sync_chat_completions(**kwargs: Any) -> ChatCompletion:
+            return _guard_gateway_error(cast(ChatCompletion, sync_fn(**kwargs)))
+
+        f = sync_compatible(sync_fn = sync_chat_completions)(async_chat_completions)  #type: ignore
         self._chat_completions = f
 
     @wraps_method_arguments_type(openai.AsyncOpenAI().chat.completions.create)
