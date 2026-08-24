@@ -48,6 +48,18 @@ def extract_user_info(raw_text: str) -> UserInfo:
 
 更多例子参见 [这里](/test/examples/ai_powered_decorator/)
 
+装饰器也接受关键字参数 (两种形式都可用于 sync 和 async 函数):
+
+```python
+@ai_powered(retry = 2)
+async def add(a: int, b: int) -> int:
+    ...
+```
+
+`retry = N` 表示遇到瞬时失败 (网络/API 错误、响应非法或不符合 schema、或响应缺少期望结构) 时最多额外重试 N 次; 默认 `retry = 0` 保持旧的快速失败行为. 注意本层重试与 OpenAI SDK 自身的 `max_retries` (网络错误) 相互独立、可能叠加. 重试耗尽后原样抛出最后一个异常.
+
+参数设计的决策记录参见 [这里](/doc/en/DecoratorParams.md).
+
 ### `@make_tool` 装饰器
 
 这个装饰器将普通Python函数转换为 LLM 的 [function calling](https://platform.openai.com/docs/guides/function-calling) 功能可以使用的 tool
@@ -95,7 +107,7 @@ if __name__ == "__main__":
 
 - 目前仅提供了Python实现，但事实上这个模式可以复制到能运行时获取类型标注的任何其他语言
 - 目前 OpenAI 的 function calling 功能并不能识别 schema 中的引用，所以当类型复杂到会产生引用时将可能出现问题，这可以通过 deref 来缓解，但当遇到递归类型时就不得不保留 ref，所以这个问题最终可能要等 LLM 提供商在训练数据集中加上这类数据后才能真正解决
-- 当前 LLM 产生的数据并不能百分百遵循所提供的 JSON Schema，这个出错的概率随着 LLM 提供商的不断训练可能会降低，但最终我们可能需要引入重试机制来让它做到无限逼近百分百正确 (重试机制正在计划当中)
+- 当前 LLM 产生的数据并不能百分百遵循所提供的 JSON Schema，重试机制只能缓解偶发性偏差 (已支持, 见上文 retry 参数); 且重试只能覆盖结构性失败, "合法但语义错误"的结果无法被检测 (没有标准答案可对照)
 
 关于贡献代码
 ----------
