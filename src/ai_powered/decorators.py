@@ -7,7 +7,7 @@ import json
 import msgspec
 import openai
 
-from ai_powered.llm.connection import LlmConnection
+from ai_powered.llm.connection import LlmConnection, LlmGatewayError
 from ai_powered.llm.definitions import FunctionSimulator, ModelFeature
 from ai_powered.llm.adapter_selector import FunctionSimulatorSelector
 from ai_powered.llm.known_models import complete_model_config
@@ -18,9 +18,10 @@ import inspect
 
 A = TypeVar("A")
 
-#: retry 环需要捕获的瞬时失败: API/网络层错误, 响应解析与结构校验错误, 以及适配器中"响应不含期望结构"的断言
+#: retry 环需要捕获的瞬时失败: API/网络层错误, LLM 网关 200+body.error 透传的上游瞬时故障 (LlmGatewayError),
+#: 响应解析与结构校验错误, 以及适配器中"响应不含期望结构"的断言
 #: NOTE: 依赖适配器中的 assert 语句, python -O 模式下 assert 被剥离, 该类故障将退化为不可重试异常 (见 doc/en/DecoratorParams.md D2)
-RETRYABLE_EXCEPTIONS: tuple[type[Exception], ...] = (openai.APIError, msgspec.DecodeError, AssertionError)
+RETRYABLE_EXCEPTIONS: tuple[type[Exception], ...] = (openai.APIError, LlmGatewayError, msgspec.DecodeError, AssertionError)
 
 
 class Result(msgspec.Struct, Generic[A]):

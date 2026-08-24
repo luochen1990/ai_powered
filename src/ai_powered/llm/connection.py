@@ -7,6 +7,15 @@ from openai.types.chat.chat_completion import ChatCompletion
 from ai_powered.utils.function_wraps import wraps_method_arguments_type
 
 
+class LlmGatewayError(RuntimeError):
+    ''' LLM 网关以 HTTP 200 + body.error 透传上游瞬时故障 (如 OpenRouter 503 overloaded)
+
+    专用类型 (而非裸 RuntimeError) 是为了让 @ai_powered(retry=N) 能精确把它纳入可重试集合,
+    而不会误重试其它同名的编程错误 (如嵌套事件循环误用); 保留 RuntimeError 基类属纯防御性
+    (仓库内无 except RuntimeError 捕获点, 以防下游已按 master 上曾经的裸 RuntimeError 捕获).
+    '''
+
+
 def _guard_gateway_error(response: ChatCompletion) -> ChatCompletion:
     ''' 网关防御 (decorator 与 chat_bot 两路径的公共咽喉点): OpenRouter 等网关偶发以
     HTTP 200 + body.error 透传上游故障 (如 503 overloaded), 此时 choices 为 None
@@ -14,7 +23,7 @@ def _guard_gateway_error(response: ChatCompletion) -> ChatCompletion:
     choices[0] 处爆出 opaque 的 TypeError. '''
     if response.choices is None:
         error = response.model_extra.get('error') if response.model_extra else None
-        raise RuntimeError(f"LLM gateway returned error in 200 response: {error}")
+        raise LlmGatewayError(f"LLM gateway returned error in 200 response: {error}")
     return response
 
 

@@ -6,9 +6,10 @@
 
 重试契约 (见 doc/en/DecoratorParams.md 决策 D2):
   - retry=N 表示额外重试 N 次 (总尝试 N+1 次), retry=0 与旧行为等价
-  - 可重试失败: openai.APIError (网络/API 层), msgspec.DecodeError (含 ValidationError,
+  - 可重试失败: openai.APIError (网络/API 层), LlmGatewayError (网关 200+body.error
+    透传上游瞬时故障, 见 test_gateway_guard.py), msgspec.DecodeError (含 ValidationError,
     JSON 语法/结构校验失败), AssertionError (适配器中"响应不含期望结构")
-  - 不可重试异常 (如 ValueError) 直接抛出
+  - 不可重试异常 (如裸 RuntimeError / ValueError) 直接抛出
   - 耗尽后原样抛出最后一个异常
 '''
 import httpx
@@ -21,6 +22,7 @@ from typing import Optional, cast
 
 import ai_powered.decorators as decorators
 from ai_powered import ai_powered
+from ai_powered.llm.connection import LlmGatewayError
 
 
 def make_completion(content: Optional[str]) -> ChatCompletion:
@@ -114,6 +116,33 @@ def test_retry_recovers_from_json_syntax_error(fake_llm):
 
     assert answer(6) == 42
     assert fake.call_count == 2
+
+
+def test_retry_recovers_from_gateway_error(fake_llm):
+    ''' LLM 网关 200+body.error 透传的上游瞬时故障 (OpenRouter 503 overloaded 等) 属于可重试失败 '''
+    fake = fake_llm([LlmGatewayError("LLM gateway returned error in 200 response: 503 overloaded"), '{"result": 42}'])
+
+    @ai_powered(retry = 1)
+    def answer(x: int) -> int:
+        ''' produce the answer '''
+        ...
+
+    assert answer(6) == 42
+    assert fake.call_count == 2
+
+
+def test_plain_runtime_error_not_retried(fake_llm):
+    ''' 裸 RuntimeError 不重试 —— 只有专用的 LlmGatewayError 纳入可重试集合, 避免误重试编程错误 (如嵌套事件循环误用) '''
+    fake = fake_llm([RuntimeError("boom"), '{"result": 42}'])
+
+    @ai_powered(retry = 3)
+    def answer(x: int) -> int:
+        ''' produce the answer '''
+        ...
+
+    with pytest.raises(RuntimeError, match = "boom"):
+        answer(6)
+    assert fake.call_count == 1
 
 
 def test_retry_recovers_from_schema_validation_error(fake_llm):
