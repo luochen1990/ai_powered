@@ -75,7 +75,7 @@ version = "3.4.9"
 description = "The Real First Universal Charset Detector. Open, modern and actively maintained alternative to Chardet."
 optional = false
 python-versions = ">=3.7"
-groups = ["dev"]
+groups = ["main", "dev"]
 files = [
     {file = "charset_normalizer-3.4.9-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:cd6280cf040f233bd7d3407b743b4b4c74f70e8e1c4199cb112a62c941c0772a"},
     {file = "charset_normalizer-3.4.9-cp310-cp310-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:aa99adc8f081b475a12843953db36831eaf83ec33eb46a90629ca6a5de45a616"},
@@ -2557,7 +2557,7 @@ version = "2.34.2"
 description = "Python HTTP for Humans."
 optional = false
 python-versions = ">=3.10"
-groups = ["dev"]
+groups = ["main", "dev"]
 files = [
     {file = "requests-2.34.2-py3-none-any.whl", hash = "sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0"},
     {file = "requests-2.34.2.tar.gz", hash = "sha256:f288924cae4e29463698d6d60bc6a4da69c89185ad1e0bcc4104f584e960b9ed"},
@@ -2890,7 +2890,7 @@ version = "2.7.0"
 description = "HTTP library with thread-safe connection pooling, file post, and more."
 optional = false
 python-versions = ">=3.10"
-groups = ["dev"]
+groups = ["main", "dev"]
 files = [
     {file = "urllib3-2.7.0-py3-none-any.whl", hash = "sha256:9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897"},
     {file = "urllib3-2.7.0.tar.gz", hash = "sha256:231e0ec3b63ceb14667c67be60f2f2c40a518cb38b03af60abc813da26505f4c"},
@@ -3017,4 +3017,4 @@ h11 = ">=0.16.0,<1"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<4"
-content-hash = "fbb7b40967f054c3302a924870f0d77ddedc03aae24efdec5d5b123e82976e77"
+content-hash = "474d64d626fe42f76a7af49675f0388226fe7eeed22775a6a2bd97cc36364db8"

@@ -37,7 +37,7 @@ def google_search(keywords: str, options: SearchOption) -> List[SearchResult]:
         **options  #type: ignore
     }
 
-    response = requests.get(url, params = params)
+    response = requests.get(url, params = params, timeout = 30)
     response.raise_for_status()  # if failed, raise exception
 
     search_results = response.json()
