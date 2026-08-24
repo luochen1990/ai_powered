@@ -1,0 +1,147 @@
+# ai-powered — Forgejo Actions CI (双托管之 forgejo 侧; GitHub 侧 .github/workflows/ 保持独立)
+#
+# 运行环境: runner label vm-nix (home-pc 上 MicroVM, host 后端, lc-studio org 级).
+# 工具链预装在 VM systemPackages (nixos 仓库 forgejo-runner-vm.mod.nix): python313/poetry/
+# pyright/flake8; 版本随 VM nixpkgs, 本仓库不自带工具链 (VM 求值禁令).
+#
+# 目录选择: 一旦存在 .forgejo/workflows/, forgejo 不再发现 .github/workflows/ (目录互斥,
+# 已从 forgejo 源码 ListWorkflows 查证), 而 GitHub 永远忽略 .forgejo/ —— 双平台天然各跑各的.
+#
+# 触发去重: PR 事件总是跑; push 仅 master (feature branch 的 push 由 PR 覆盖, 避免双跑).
+# concurrency 按 PR 分组去旧: runner capacity=1 串行, 旧 run 占位会延迟最新 push 的反馈.
+#
+# LLM provider: OpenRouter 免费层 nvidia/nemotron-3-super-120b-a12b:free (120B MoE,
+# 激活 12B, tools+结构化输出双支持), OPENROUTER_API_KEY 走 repo secret (注册
+# openrouter.ai 免费创建). 免费层限额: 无充值 50 req/day / 充 $10 后 1000 req/day,
+# 20 RPM (openai client 自带 429 重试可吸收).
+# 模型/端点是部署事实, 与本地 openrouter.private.envrc 同步更新.
+# OPENAI_EXTRA_BODY 关闭 thinking (OpenRouter reasoning 参数): thinking 模型的
+# 思考链长度不稳定会带动输出漂移 (实测复现性失败), 关闭后 5 次输出逐字节一致;
+# 且跳过思考链生成, 单请求亚秒级.
+# 选型史 (scripts/model_baseline.py 门禁 + 全量 pytest, 2026-08):
+#   - 本地小模型 (granite4.1:8b / ornith:9b / gemma4:12b) 均 14/15 倒在 "模型扮演
+#     函数模拟器" 元任务 (指令遵循/一致性短板), 属 8-12B 档结构性能力边界.
+#   - qwen3.6:27b (本地 ollama) 能力达标但 27B+thinking 桌面共存 GPU 仅 ~13 tok/s
+#     且与桌面进程争抢 VRAM, 全量套件 >30min 超 CI 时限, 已弃用.
+#   - glm-5.2:free (OpenRouter 旗舰) 持续 429 上游限流, 免费层旗舰容量紧张, 弃;
+#     dots-3-note:free 偶发 400/no tool_calls 不稳定, 弃; openrouter/free (自动
+#     路由) 目标模型强制 reasoning 不可控, 弃. nemotron-120b:free 实测三路径 100%
+#     + 复现性通过 + 全量 pytest 15/15 (52s), 为 "能力够用 + 限额富裕 + 可关思考"
+#     的帕累托最优.
+#   - VM 出境网络: openrouter.ai 仅 IPv4 可达 (IPv6 立即不可达, curl 会自动回退).
+#
+# venv/缓存: 落 runner 持久缓存卷 (跨 job 复用, 仅主机重启才丢). venv 用固定路径 +
+# python 版本戳: poetry 默认 venv 名含 workspace 路径 hash (每 job 变化, 无法复用),
+# 故自建固定 venv. 卷为 org 各仓库共享, venv 路径带项目名隔离; poetry 缓存按 wheel
+# 内容寻址, 共享安全且有益.
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch: # 手动重试: forgejo UI → Actions → ci → Run workflow
+
+concurrency:
+  group: ci-pr-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: vm-nix
+    # timeout 是硬上限 (超时算 job failure 阻塞合并), 取宽松预算: 热路径 (venv 复用)
+    # 实测 ~1.5min; 冷路径 (建 venv + 全量装依赖) + 免费层 20 RPM 限流 + reruns 重试
+    # 的最坏叠加留足余量. (qwen3.6:27b 时代 30min 真超时过, 见文件头选型史.)
+    timeout-minutes: 30
+    env:
+      VIRTUAL_ENV: /var/lib/forgejo-runner/cache/ai-powered-venv
+      POETRY_CACHE_DIR: /var/lib/forgejo-runner/cache/poetry
+      # LLM provider (key 走 secret, 见文件头注释). FEATURES pin: 平台识别按 URL 子串
+      # 匹配 (known_models.py), "openrouter" 不含任何已知平台子串, 未 pin 会落入未知
+      # 平台默认 {tools} 而走 tools 适配器. pin 为 ALL_FEATURES 走 structured_outputs
+      # 适配器, 与 GitHub CI (openai 平台未知模型默认 gpt-4o-mini = ALL_FEATURES) 路径
+      # 等价; 本地 envrc 同样显式 pin 同值 (constants.py 的 OPENAI_MODEL_FEATURES
+      # 显式覆盖机制, 三处一致性由 pin 显式保证而非平台默认).
+      OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      OPENAI_BASE_URL: https://openrouter.ai/api/v1
+      OPENAI_MODEL_NAME: nvidia/nemotron-3-super-120b-a12b:free
+      OPENAI_MODEL_FEATURES: tools,seed,structured_outputs,strict_mode
+      # temperature 0 对齐 baseline 脚本复现性方法论, 显著降低输出随机性 (实测
+      # test_extract_identity 失败率 ~17% -> 个位数); reasoning 关闭见文件头.
+      OPENAI_EXTRA_BODY: '{"reasoning": {"enabled": false}, "temperature": 0}'
+      DEBUG: "True"
+    steps:
+      # checkout 直接用 git + SSH (不用 actions/checkout): 实例 DISABLE_HTTP_GIT=true 且
+      # SSH 用户名是 forgejo (非 git) + 非标准端口 5522, actions/checkout 硬编码不兼容.
+      # 依赖 repo secret DEPLOY_KEY (只读 deploy key). 浅克隆即可 (无 diff 类 step).
+      - name: Checkout via SSH
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+        run: |
+          set -eu
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p 5522 git.lambda.lc >> ~/.ssh/known_hosts
+          git init
+          git remote add origin "ssh://forgejo@git.lambda.lc:5522/${GITHUB_REPOSITORY}.git"
+          git fetch --depth 1 origin "$GITHUB_SHA"
+          git checkout "$GITHUB_SHA"
+
+      # 最小权限收尾: runner VM 与缓存卷为 org 各仓库共享, checkout 写入的 deploy key
+      # 若不清理, 本 repo 的只读 key 对 org 内其他 repo 的后续 job 可读.
+      - name: Cleanup deploy key
+        if: always()
+        run: rm -f ~/.ssh/id_ed25519
+
+      # venv 固定于缓存卷, 解释器显式钉 python3.13 (nixos 侧 python313 包, 与开发基线
+      # 及 GitHub CI 矩阵上限一致; python3=3.14 生态未验证). 重建条件: venv 丢失/GC 或
+      # 换 pin 导致 minor 不匹配 (旧 venv 绝对路径指向旧 store path 失效).
+      # poetry sync (而非 install): 增量安装 + 清除 lock 中已移除的包, 防旧 venv 残留
+      # 依赖掩蔽 "删依赖后仍可 import" 的错误.
+      # --without dev: 跳过 funix (重型 UI 依赖, CI 无用); pyright/flake8 用 VM 预装版.
+      - name: Setup venv and install dependencies
+        run: |
+          set -eu
+          STAMP="$VIRTUAL_ENV.python-stamp"
+          WANT="$(python3.13 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+          if [ ! -x "$VIRTUAL_ENV/bin/python" ] || [ "$(cat "$STAMP" 2>/dev/null || true)" != "$WANT" ]; then
+            rm -rf "$VIRTUAL_ENV"
+            python3.13 -m venv "$VIRTUAL_ENV"
+            printf '%s\n' "$WANT" > "$STAMP"
+            echo "venv: created fresh ($WANT)"
+          else
+            echo "venv: reuse ($WANT)"
+          fi
+          poetry sync --with test --without dev
+
+      # 类型检查与 lint 在 LLM 测试之前: 快步骤先行, 失败时反馈更快.
+      # pyright 依赖解析用 job 级 VIRTUAL_ENV + 下方 PATH 前置; PATH export 是 pytest
+      # (venv 内) 的调用来源, 不可当作冗余清理; flake8/pyright 二进制来自 VM 预装路径.
+      - name: Type check (pyright)
+        run: |
+          set -eu
+          export PATH="$VIRTUAL_ENV/bin:$PATH"
+          pyright
+
+      - name: Lint (flake8)
+        run: |
+          set -eu
+          export PATH="$VIRTUAL_ENV/bin:$PATH"
+          # 阻塞子集与 GitHub CI / just check 对齐: 语法错误 + 未定义名
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+
+      # 功能测试走全链路 (test/examples/), LLM 端点为 OpenRouter 免费层.
+      # deselect use_google_search: 该测试经 google_search 工具直连 googleapis.com,
+      # runner VM 网络不出境 (实测 SYN-SENT 无限挂起, 曾致 CI 30min 超时的元凶之一),
+      # GOOGLE secrets 配了也不可达; 此测试由 GitHub CI (境外 runner) 覆盖.
+      # --reruns 2: 免费层网关偶发 200+body.error 透传上游 503 (openai client 内置
+      # 重试不覆盖, connection.py 的 LlmConnection 防御转为清晰 RuntimeError), 传输噪声不应一票
+      # 否决; 连续失败仍判红, 不掩盖真回归.
+      # pytest 配置 (testpaths/xdist) 由 pyproject.toml 提供; GitHub CI 同为裸 pytest
+      # 调用 (其另有 coverage 参数, 此处不带).
+      - name: Test (functional)
+        run: |
+          set -eu
+          export PATH="$VIRTUAL_ENV/bin:$PATH"
+          pytest --reruns 2 --reruns-delay 2 --deselect test/examples/chat_bot/use_google_search.py
