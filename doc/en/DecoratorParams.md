@@ -23,12 +23,16 @@ behavior, not handled in code.
 
 ## Implementation batches
 
-- **B1 (this change): decorator params + retry + offline test injection point.**
+- **B1 (done): decorator params + retry + offline test injection point.**
   - Dual-form decorator: bare `@ai_powered` and `@ai_powered(retry=N)`, both on sync and async functions. Backwards compatible.
   - Retry loop implemented as module-level `_call_with_retry` / `_simulate_and_validate` (easy-sync recompiles function bodies for sync execution, so closures and inner functions are **not** visible in the rewritten body — dependencies must be passed explicitly).
   - `FakeLlmConnection` (scripted responses/exceptions, `sync_compatible` like the real one) enables deterministic offline tests; the fixture also pins decoration-time model config so tests are independent of host env vars.
-- **B2: model registry + `model=` parameter.** Provider-prefixed resolution against a registry with per-provider `base_url` + key env var; user registration API; single model-resolution entry point (today env handling is duplicated in `decorators.py` and `chat_bot.py`).
-- **B3: agent protocol + reference implementation.** `FunctionSpec` value object; `FunctionAgent` ABC with `run(arguments_json) -> str` returning `{"result": ...}`-shaped JSON; exit validation applies to agents unchanged (agents cannot bypass the type contract). Sandbox out of scope (D4).
+- **B2 (done): model registry + `model=` parameter + config SSOT consolidation.**
+  - `llm/registry.py`: provider-name index over the single `KnownPlatform` dataset (`llm/known_models.py`); `register_model()` for user-defined providers (env-indirect API keys, no provider-name shadowing).
+  - `llm/resolver.py`: the only model-resolution entry (`resolve_model`), consumed by both `@ai_powered` and `ChatBot`; prefixed names take the registry path, bare/None take the unchanged env path. Prefixed resolution applies **only** to the `model=` param — env `OPENAI_MODEL_NAME` stays pass-through (deployments use `org/model`-shaped names that APIs accept as-is).
+  - Known-platform entries gained `base_url` / `api_key_env` / `default_model` (open platforms like openrouter/localhost fall back for unlisted names; closed platforms fail fast). `complete_model_config` keeps historical behavior (default fallback = `default_model or known_model_list[0]`, all built-in `default_model` = their `[0]`).
+  - Decision: **no cross-decoration connection caching yet** — openai clients are cheap pooled objects, while caching would complicate test injection (monkeypatched `resolve_model`); revisit when a real use case demands it.
+- **B3 (planned): agent protocol + reference implementation.** `FunctionSpec` value object; `FunctionAgent` ABC with `run(arguments_json) -> str` returning `{"result": ...}`-shaped JSON; exit validation applies to agents unchanged (agents cannot bypass the type contract). Sandbox out of scope (D4).
 
 ## Non-goals (guard against scope creep)
 

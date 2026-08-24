@@ -6,8 +6,10 @@
 #   - just test-model  : 模型选型验证 (scripts/model_baseline.py, 绕开项目代码, 需要本地 ollama)
 #   - just test-all    : 先验证模型可靠, 再跑功能测试 (推荐换模型时使用)
 
-# NOTE: pytest 统一加 `-o pythonpath=src` —— worktree/共享 venv 场景下防止 import 解析到主仓库旧代码;
-# 该配置不落 pyproject.toml, 否则 CI 的 wheel 安装测试分支 (version: 前缀提交) 会被 checkout 源码劫持, 门禁静默失效
+# NOTE: pytest 统一加 `-o pythonpath=src` —— worktree/共享 venv 场景下防止 import 解析到主仓库旧代码
+# (共享 venv 的 site-packages 可能 editable-install 指向主仓库 src, 项目外的 python -c / pyright 探针同样会被劫持,
+#  需显式 PYTHONPATH=src / extraPaths); 该配置不落 pyproject.toml, 否则 CI 的 wheel 安装测试分支 (version: 前缀提交)
+# 会被 checkout 源码劫持, 门禁静默失效
 pytest_cmd := "poetry run pytest -o pythonpath=src"
 
 # 默认列出可用命令

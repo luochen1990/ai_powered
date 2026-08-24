@@ -7,12 +7,12 @@ import json
 import msgspec
 import openai
 
-from ai_powered.llm.connection import LlmConnection, LlmGatewayError
+from ai_powered.llm.connection import LlmGatewayError
 from ai_powered.llm.definitions import FunctionSimulator, ModelFeature
 from ai_powered.llm.adapter_selector import FunctionSimulatorSelector
-from ai_powered.llm.known_models import complete_model_config
+from ai_powered.llm.resolver import resolve_model
 from ai_powered.schema_deref import deref
-from ai_powered.constants import DEBUG, OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL_FEATURES, OPENAI_MODEL_NAME, SYSTEM_PROMPT, SYSTEM_PROMPT_JSON_SYNTAX, SYSTEM_PROMPT_RETURN_SCHEMA
+from ai_powered.constants import DEBUG, SYSTEM_PROMPT, SYSTEM_PROMPT_JSON_SYNTAX, SYSTEM_PROMPT_RETURN_SCHEMA
 from ai_powered.colors import gray, green, red, yellow
 import inspect
 
@@ -90,13 +90,13 @@ def ai_powered(fn: Callable[P, R]) -> Callable[P, R]:
 
 
 @overload
-def ai_powered(fn: Callable[P, R], *, retry: int = 0) -> Callable[P, R]:
+def ai_powered(fn: Callable[P, R], *, model: str | None = None, retry: int = 0) -> Callable[P, R]:
     ''' 混合形式: 显式传入函数与参数 (程序化装饰场景) '''
     ...
 
 
 @overload
-def ai_powered(*, retry: int = 0) -> Callable[[Callable[P, R]], Callable[P, R]]:
+def ai_powered(*, model: str | None = None, retry: int = 0) -> Callable[[Callable[P, R]], Callable[P, R]]:
     ''' 参数形式: R 不加 Awaitable 特判 —— async 函数的类型本身就是 (...) -> Coroutine[..., R], 无约束 R 已覆盖 '''
     ...
 
@@ -104,12 +104,16 @@ def ai_powered(*, retry: int = 0) -> Callable[[Callable[P, R]], Callable[P, R]]:
 def ai_powered(
     fn: Callable[P, Awaitable[R]] | Callable[P, R] | None = None,
     *,
+    model: str | None = None,
     retry: int = 0,
 ) -> Any:
-    ''' Provide an AI powered implementation of a function '''
+    ''' Provide an AI powered implementation of a function
+
+    model: "provider/model" 前缀名走注册表 (如 "deepseek/deepseek-chat"); None/裸名走环境变量路径 (现状)
+    '''
 
     if fn is None:  # used as `@ai_powered(...)`
-        return partial(ai_powered, retry = retry)
+        return partial(ai_powered, model = model, retry = retry)
 
     if not isinstance(retry, int) or isinstance(retry, bool) or retry < 0:
         raise ValueError(f"retry must be a non-negative integer, got {retry!r}")
@@ -140,8 +144,9 @@ def ai_powered(
             print(f"{param_name} (json schema): {schema}")
         print(f"return (json schema): {return_schema}")
 
-    connection = LlmConnection(api_key = OPENAI_API_KEY, base_url = OPENAI_BASE_URL)
-    model_config = complete_model_config(OPENAI_BASE_URL, OPENAI_MODEL_NAME, OPENAI_MODEL_FEATURES)
+    resolved = resolve_model(model)
+    connection = resolved.connection
+    model_config = resolved.model_config
     model_name = model_config.model_name
     model_features: set[ModelFeature] = model_config.supported_features
     model_options: dict[str, Any] = model_config.suggested_options

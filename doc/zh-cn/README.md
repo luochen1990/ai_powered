@@ -58,6 +58,21 @@ async def add(a: int, b: int) -> int:
 
 `retry = N` 表示遇到瞬时失败 (网络/API 错误、响应非法或不符合 schema、或响应缺少期望结构) 时最多额外重试 N 次; 默认 `retry = 0` 保持旧的快速失败行为. 注意本层重试与 OpenAI SDK 自身的 `max_retries` (网络错误) 相互独立、可能叠加. 重试耗尽后原样抛出最后一个异常.
 
+还可以用 `provider/model` 前缀名在函数粒度选择模型 (内置注册表解析, 无需切换环境变量). 可注册自定义 provider, 注意注册必须发生在被装饰函数定义**之前**:
+
+```python
+from ai_powered import ai_powered, register_model
+
+register_model("mygateway/my-model", base_url = "https://llm.example.com/v1", api_key_env = "MYGATEWAY_API_KEY")
+
+@ai_powered(model = "deepseek/deepseek-chat")
+def translate(text: str) -> str:
+    ''' 将文本翻译为英文 '''
+    ...
+```
+
+解析规则与内置 provider 列表参见 [Configuration](/doc/en/Configuration.md).
+
 参数设计的决策记录参见 [这里](/doc/en/DecoratorParams.md).
 
 ### `@make_tool` 装饰器

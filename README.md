@@ -94,6 +94,21 @@ async def add(a: int, b: int) -> int:
     ...
 ```
 
+You can also pick a model per function with a `provider/model` prefixed name (resolved against a built-in registry, no env switching needed). Custom providers can be registered — note that registration must happen **before** the decorated function is defined:
+
+```python
+from ai_powered import ai_powered, register_model
+
+register_model("mygateway/my-model", base_url = "https://llm.example.com/v1", api_key_env = "MYGATEWAY_API_KEY")
+
+@ai_powered(model = "deepseek/deepseek-chat")
+def translate(text: str) -> str:
+    ''' translate the text to English '''
+    ...
+```
+
+See [Configuration](/doc/en/Configuration.md) for resolution rules and the provider list.
+
 `retry = N` means up to N extra attempts when a transient failure occurs (network/API errors, malformed or schema-invalid responses, or responses missing the expected structure). The default `retry = 0` keeps the old fail-fast behavior. Note that retries at this level are independent of (and may stack with) the OpenAI SDK's own `max_retries` for network errors. When a retryable failure persists, the last exception is re-raised as-is.
 
 Design decisions for decorator parameters are recorded [here](/doc/en/DecoratorParams.md).

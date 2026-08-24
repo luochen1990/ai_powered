@@ -7,13 +7,15 @@ from openai.types.chat.chat_completion_message_function_tool_call import ChatCom
 from openai.types.chat.chat_completion_tool_param import ChatCompletionToolParam
 
 from ai_powered.colors import gray
-from ai_powered.constants import DEBUG, OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL_NAME, OPENAI_MODEL_FEATURES
-from ai_powered.llm.known_models import complete_model_config
+from ai_powered.constants import DEBUG
 from ai_powered.llm.connection import LlmConnection
+from ai_powered.llm.resolver import resolve_model
 from ai_powered.tool_call import MakeTool
 
-default_connection = LlmConnection(base_url = OPENAI_BASE_URL, api_key = OPENAI_API_KEY)
-model_config = complete_model_config(OPENAI_BASE_URL, OPENAI_MODEL_NAME, OPENAI_MODEL_FEATURES)
+#: 模块级默认解析 (SSOT: 与 @ai_powered 装饰器共用 resolve_model, 见 llm/resolver.py)
+_default_resolved = resolve_model(None)
+default_connection = _default_resolved.connection
+model_config = _default_resolved.model_config
 
 
 @dataclass

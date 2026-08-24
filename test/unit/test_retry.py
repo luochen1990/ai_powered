@@ -1,8 +1,9 @@
 '''
 职责: @ai_powered 装饰器 retry 参数的离线单元测试.
 
-通过 monkeypatch `ai_powered.decorators.LlmConnection` 注入脚本化的 FakeLlmConnection,
-不触网、结果确定, 覆盖重试语义的全部关键分支 (与 test/examples/ 的真实 LLM 测试互补).
+通过 conftest 的 fake_llm fixture (patch `ai_powered.decorators.resolve_model` 返回脚本化的
+FakeLlmConnection) 注入, 不触网、结果确定, 覆盖重试语义的全部关键分支 (与 test/examples/
+的真实 LLM 测试互补).
 
 重试契约 (见 doc/en/DecoratorParams.md 决策 D2):
   - retry=N 表示额外重试 N 次 (总尝试 N+1 次), retry=0 与旧行为等价
@@ -15,51 +16,11 @@
 import httpx
 import openai
 import pytest
-from easy_sync import Waitable, sync_compatible
-from openai.types.chat import ChatCompletion, ChatCompletionMessage
-from openai.types.chat.chat_completion import Choice
-from typing import Optional, cast
+from easy_sync import Waitable
+from typing import cast
 
-import ai_powered.decorators as decorators
 from ai_powered import ai_powered
 from ai_powered.llm.connection import LlmGatewayError
-
-
-def make_completion(content: Optional[str]) -> ChatCompletion:
-    return ChatCompletion(
-        id = "fake-completion", created = 0, model = "fake-model", object = "chat.completion",
-        choices = [Choice(finish_reason = "stop", index = 0, message = ChatCompletionMessage(role = "assistant", content = content))],
-    )
-
-
-class FakeLlmConnection:
-    ''' 脚本化连接: 依次消费脚本元素, Exception 实例则抛出, str 则作为 content 返回; 脚本耗尽后重复最后一个元素 '''
-
-    def __init__(self, script: list[Exception | str]):
-        self.script = list(script)
-        self.call_count = 0
-
-    @sync_compatible
-    async def chat_completions(self, **kwargs) -> ChatCompletion:
-        ''' 与 LlmConnection.chat_completions 同为 sync_compatible, 兼容 easy_sync 的 sync 转写 '''
-        step = self.script[min(self.call_count, len(self.script) - 1)]
-        self.call_count += 1
-        if isinstance(step, Exception):
-            raise step
-        return make_completion(step)
-
-
-@pytest.fixture
-def fake_llm(monkeypatch):
-    ''' 安装脚本化连接; 同时 pin 住装饰期读取的模型配置 (走 StructuredOutput 路径, 裸 JSON 响应), 使测试与宿主环境变量解耦 '''
-    def setup(script: list[Exception | str]) -> FakeLlmConnection:
-        fake = FakeLlmConnection(script)
-        monkeypatch.setattr(decorators, "LlmConnection", lambda **kwargs: fake)
-        monkeypatch.setattr(decorators, "OPENAI_BASE_URL", "https://api.openai.com/v1")
-        monkeypatch.setattr(decorators, "OPENAI_MODEL_NAME", None)
-        monkeypatch.setattr(decorators, "OPENAI_MODEL_FEATURES", None)
-        return fake
-    return setup
 
 
 def conn_error() -> openai.APIConnectionError:
