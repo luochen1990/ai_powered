@@ -73,6 +73,19 @@ def translate(text: str) -> str:
 
 解析规则与内置 provider 列表参见 [Configuration](/doc/en/Configuration.md).
 
+还可以用自定义 agent (FunctionAgent 子类) 替换默认的单次请求模拟, 例如内置的多轮推理引擎:
+
+```python
+from ai_powered import ReasoningAgent, ai_powered
+
+@ai_powered(agent = ReasoningAgent, retry = 1)
+def solve_word_problem(problem: str) -> int:
+    ''' 分步求解应用题, 返回数字答案 '''
+    ...
+```
+
+agent 在装饰期为每个函数构造一次, 收到 (spec, model_config, connection); 返回值的类型校验与 retry 依然生效. 子类契约见 `FunctionAgent` docstring.
+
 参数设计的决策记录参见 [这里](/doc/en/DecoratorParams.md).
 
 ### `@make_tool` 装饰器

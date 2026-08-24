@@ -1,5 +1,5 @@
 import inspect
-from typing import Callable, Generic
+from typing import Any, Callable, Generic
 from typing_extensions import ParamSpec, TypeVar
 import msgspec
 
@@ -13,6 +13,28 @@ from ai_powered.schema_deref import deref
 
 P = ParamSpec("P")
 R = TypeVar("R")
+
+
+def return_result_tool_param(return_schema: dict[str, Any]) -> ChatCompletionToolParam:
+    ''' 构造 "return_result" 工具的 OpenAI 参数: 参数 schema 即 {"result": 返回值schema}
+
+    单次模拟 (ToolsFunctionSimulator) 与多轮 agent (ReasoningAgent) 共用同一提交契约 —— 模型以
+    调用该工具的方式提交结构化结果, 参数即最终返回值.
+    '''
+    return {
+        "type": "function",
+        "function":
+            {
+                "name": "return_result",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "result": return_schema,
+                    },
+                    "required": ["result"],
+                }
+            },
+    }
 
 
 class MakeTool(msgspec.Struct, Generic[P, R]):

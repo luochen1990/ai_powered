@@ -2,7 +2,7 @@ import json
 import os
 from typing import Any, Optional
 
-from ai_powered.llm.definitions import ModelFeature
+from ai_powered.llm.definitions import FunctionSpec, ModelFeature
 
 DEBUG = os.environ.get('DEBUG', 'False').lower() in {'true', '1', 'yes', 'on'}
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "sk-1234567890ab-MOCK-API-KEY")
@@ -43,3 +43,16 @@ In case you don't know about the syntax of JSON, here are some example:
 - boolean: true or false
 - null value: null
 """
+
+
+def base_system_prompt(spec: FunctionSpec) -> str:
+    ''' 通用 prompt 基座 (SSOT): 单次模拟器 (GenericFunctionSimulator) 与 agent (ReasoningAgent) 共用,
+
+    各自在基座后拼接差异部分 (适配器的结构化输出说明 / agent 的多轮推理指引);
+    docstring 兜底文案只此一份, 防止两条路径静默漂移.
+    '''
+    return SYSTEM_PROMPT.format(
+        signature = spec.signature,
+        docstring = spec.docstring or "no doc, guess intention from function name",
+        parameters_schema = json.dumps(spec.parameters_schema),
+    )

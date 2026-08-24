@@ -19,6 +19,7 @@ Features
 2. Support [LLM Models](https://github.com/luochen1990/ai_powered/blob/master/src/ai_powered/llm/known_models.py) with or without tool_calls support
 3. Full async support and sync compatible (supported by [easy-sync](https://github.com/luochen1990/easy-sync)), use either style you want
 4. Configurable retry on transient failures (network errors, malformed or schema-invalid LLM responses)
+5. Per-function model selection (`model = "provider/name"`) and pluggable execution engines (`agent = YourAgent`, e.g. the built-in multi-turn `ReasoningAgent`)
 
 Code Quality Promise
 --------------------
@@ -108,6 +109,19 @@ def translate(text: str) -> str:
 ```
 
 See [Configuration](/doc/en/Configuration.md) for resolution rules and the provider list.
+
+Or replace the default single-request simulation with a custom agent (a `FunctionAgent` subclass) — e.g. the built-in multi-turn reasoning agent:
+
+```python
+from ai_powered import ReasoningAgent, ai_powered
+
+@ai_powered(agent = ReasoningAgent, retry = 1)
+def solve_word_problem(problem: str) -> int:
+    ''' Solve the word problem step by step and return the numeric answer. '''
+    ...
+```
+
+Agents are constructed once per decorated function and receive `(spec, model_config, connection)`; the return-type validation (and `retry`) still applies to their output. See the `FunctionAgent` docstring for the subclass contract.
 
 `retry = N` means up to N extra attempts when a transient failure occurs (network/API errors, malformed or schema-invalid responses, or responses missing the expected structure). The default `retry = 0` keeps the old fail-fast behavior. Note that retries at this level are independent of (and may stack with) the OpenAI SDK's own `max_retries` for network errors. When a retryable failure persists, the last exception is re-raised as-is.
 

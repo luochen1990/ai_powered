@@ -19,7 +19,7 @@ class StructuredOutputFunctionSimulator(GenericFunctionSimulator):
                     "schema": {
                         "type": "object",
                         "properties": {
-                            "result": self.return_schema,
+                            "result": self.spec.return_schema,
                         },
                         "required": ["result"],
                     }

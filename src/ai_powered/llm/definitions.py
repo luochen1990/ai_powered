@@ -25,15 +25,26 @@ class ModelFeature(enum.Enum):
 ALL_FEATURES: set[ModelFeature] = {x for x in ModelFeature}
 
 
-@dataclass
-class FunctionSimulator(ABC):
-    ''' just a wrapper to call model, without checking type correctness '''
+@dataclass(frozen = True)
+class FunctionSpec:
+    ''' 被模拟函数的规格值对象: 装饰期从签名/docstring/类型注解一次性提取
+
+    单次 LLM 请求模拟器 (FunctionSimulator 族) 与多轮 agent (FunctionAgent) 共用同一份规格,
+    是 "AI 如何扮演这个函数" 的单一事实来源.
+    '''
 
     function_name: str
     signature: str
     docstring: Optional[str]
     parameters_schema: dict[str, Any]
     return_schema: dict[str, Any]
+
+
+@dataclass
+class FunctionSimulator(ABC):
+    ''' just a wrapper to call model, without checking type correctness '''
+
+    spec: FunctionSpec
 
     @sync_compatible
     async def query_model(self, arguments_json: str) -> str:
