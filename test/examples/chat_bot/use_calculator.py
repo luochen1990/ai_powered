@@ -12,9 +12,7 @@ def calculator(python_expression: str) -> str:
     return rst
 
 class MyChatBot (ChatBot):
-    system_prompt = '''
-    Please answer the user's questions. If any calculations are required, use the calculator available in the tool. It supports complex Python expressions. When using it, make sure to convert the user's mathematical expression to a valid Python expression. Do not use any undefined functions; if the user's expression includes function calls, convert them to Python's built-in functions or syntax.
-    '''
+    system_prompts = ['''Please answer the user's questions. If any calculations are required, use the calculator available in the tool. It supports complex Python expressions. When using it, make sure to convert the user's mathematical expression to a valid Python expression. Do not use any undefined functions; if the user's expression includes function calls, convert them to Python's built-in functions or syntax.''']
     tools = (calculator,)
 
 def test_use_calculator():
