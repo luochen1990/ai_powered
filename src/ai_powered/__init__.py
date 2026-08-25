@@ -1,5 +1,5 @@
 from .decorators import ai_powered as ai_powered
-from .agent import FunctionAgent as FunctionAgent, ReasoningAgent as ReasoningAgent
+from .agent import FunctionAgent as FunctionAgent, ReasoningAgent as ReasoningAgent, GenericAgent as GenericAgent
 from .agent import AgentRunError as AgentRunError
 from .llm.registry import register_model as register_model
 from .llm.connection import LlmGatewayError as LlmGatewayError

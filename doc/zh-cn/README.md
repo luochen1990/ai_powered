@@ -94,6 +94,7 @@ agent 在装饰期为每个函数构造一次, 收到 (spec, model_config, conne
 
 ```python
 from ai_powered import make_tool
+from ai_powered.utils.safe_eval import safe_eval
 import openai
 
 @make_tool

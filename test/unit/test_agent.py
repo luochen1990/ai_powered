@@ -8,7 +8,7 @@
   - agent 接收 (spec, model_config, connection) —— model 解析结果原样传入 agent 构造器
   - ReasoningAgent 参考实现: 多轮推理循环 / return_result 提交 / max_rounds 耗尽 / 未知工具拒绝
 
-全程离线: FakeAgent 脚本化; ReasoningAgent 用脚本化 FakeLlmConnection 驱动.
+全程离线: FakeAgent 脚本化; ReasoningAgent 用 conftest 的 ScriptedCompletionConnection 驱动.
 '''
 from typing import Optional, cast
 
@@ -18,52 +18,14 @@ from easy_sync import Waitable, sync_compatible
 from openai.types.chat import ChatCompletion, ChatCompletionMessage
 from openai.types.chat.chat_completion import Choice
 from openai.types.chat.chat_completion_message_function_tool_call import ChatCompletionMessageFunctionToolCall, Function
-from openai.types.chat.chat_completion_message_param import ChatCompletionMessageParam
+
+from conftest import FAKE_TOOLS_MODEL, ScriptedCompletionConnection, make_content_completion, make_spec, make_tool_call_completion
 
 from ai_powered import FunctionAgent, ReasoningAgent, ai_powered
 from ai_powered.agent import AgentRunError
 from ai_powered.llm.connection import LlmConnection
-from ai_powered.llm.definitions import FunctionSpec, ModelFeature
-from ai_powered.llm.known_models import KnownModel
+from ai_powered.llm.definitions import FunctionSpec
 from ai_powered.tool_call import return_result_tool_param
-
-#: ReasoningAgent 离线测试的模型配置 (声明 tools 能力, 满足其 required_features)
-_REASONING_MODEL = KnownModel("fake-model", {ModelFeature.tools})
-
-
-def make_content_completion(content: Optional[str]) -> ChatCompletion:
-    return ChatCompletion(
-        id = "fake-completion", created = 0, model = "fake-model", object = "chat.completion",
-        choices = [Choice(finish_reason = "stop", index = 0, message = ChatCompletionMessage(role = "assistant", content = content))],
-    )
-
-
-def make_tool_call_completion(tool_name: str, arguments_json: str) -> ChatCompletion:
-    ''' 模拟模型调用工具 (如 return_result) 提交结果 '''
-    tc = ChatCompletionMessageFunctionToolCall(id = "call-1", function = Function(name = tool_name, arguments = arguments_json), type = "function")
-    return ChatCompletion(
-        id = "fake-completion", created = 0, model = "fake-model", object = "chat.completion",
-        choices = [Choice(finish_reason = "tool_calls", index = 0, message = ChatCompletionMessage(role = "assistant", content = None, tool_calls = [tc]))],
-    )
-
-
-class ScriptedCompletionConnection:
-    ''' 脚本化连接 (ReasoningAgent 离线驱动): 依次返回预构造的 ChatCompletion (支持 tool_call 形态),
-
-    耗尽后重复末元素; spy 记录每次请求的 messages 供对话累积断言. 与 LlmConnection 同为 sync_compatible.
-    '''
-
-    def __init__(self, script: list[ChatCompletion]):
-        self.script = list(script)
-        self.call_count = 0
-        self.seen_messages: list[list[ChatCompletionMessageParam]] = []
-
-    @sync_compatible
-    async def chat_completions(self, **kwargs) -> ChatCompletion:
-        self.seen_messages.append(list(kwargs.get("messages", [])))  # 拷贝快照 —— 调用方可能继续 append 同一 list
-        step = self.script[min(self.call_count, len(self.script) - 1)]
-        self.call_count += 1
-        return step
 
 
 class FakeAgent(FunctionAgent):
@@ -261,14 +223,10 @@ def test_agent_async_wait_in_sync_context(fake_llm):
     assert cast(Waitable[int], afn(6)).wait() == 42
 
 
-def _spec() -> FunctionSpec:
-    return FunctionSpec("fn", "def fn(x: int) -> int", "doc", {"x": {"type": "integer"}}, {"type": "integer"})
-
-
 def test_reasoning_agent_submits_after_musing():
     ''' 参考实现: 先输出一轮纯文本推理, 再调用 return_result 提交 → 两轮循环, 中间推理累积进对话 '''
     conn = ScriptedCompletionConnection([make_content_completion("let me think: 6 * 7 ..."), make_tool_call_completion("return_result", '{"result": 42}')])
-    agent = ReasoningAgent(_spec(), _REASONING_MODEL, cast(LlmConnection, conn))
+    agent = ReasoningAgent(make_spec(), FAKE_TOOLS_MODEL, cast(LlmConnection, conn))
 
     assert agent.run('{"x": 6}').wait() == '{"result": 42}'
     assert conn.call_count == 2
@@ -279,7 +237,7 @@ def test_reasoning_agent_submits_after_musing():
 def test_reasoning_agent_empty_round_nudges_and_recovers():
     ''' 空 content 且无工具调用的轮次: 追问 (维持 role 交替) 而非终止/死循环, 下一轮提交成功 '''
     conn = ScriptedCompletionConnection([make_content_completion(None), make_content_completion(None), make_tool_call_completion("return_result", '{"result": 7}')])
-    agent = ReasoningAgent(_spec(), _REASONING_MODEL, cast(LlmConnection, conn))
+    agent = ReasoningAgent(make_spec(), FAKE_TOOLS_MODEL, cast(LlmConnection, conn))
 
     assert agent.run('{"x": 6}').wait() == '{"result": 7}'
     assert conn.call_count == 3
@@ -297,7 +255,7 @@ def test_reasoning_agent_parallel_tool_calls_pick_return_result():
         choices = [Choice(finish_reason = "tool_calls", index = 0, message = ChatCompletionMessage(role = "assistant", content = None, tool_calls = [other, wanted]))],
     )
     conn = ScriptedCompletionConnection([resp])
-    agent = ReasoningAgent(_spec(), _REASONING_MODEL, cast(LlmConnection, conn))
+    agent = ReasoningAgent(make_spec(), FAKE_TOOLS_MODEL, cast(LlmConnection, conn))
 
     assert agent.run('{"x": 6}').wait() == '{"result": 42}'
 
@@ -309,7 +267,7 @@ def test_reasoning_agent_max_rounds_exhausted():
     class EagerAgent(ReasoningAgent):
         max_rounds = 3
 
-    agent = EagerAgent(_spec(), _REASONING_MODEL, cast(LlmConnection, conn))
+    agent = EagerAgent(make_spec(), FAKE_TOOLS_MODEL, cast(LlmConnection, conn))
 
     with pytest.raises(AgentRunError, match = "3 rounds"):
         agent.run('{}').wait()
@@ -318,7 +276,7 @@ def test_reasoning_agent_max_rounds_exhausted():
 
 def test_reasoning_agent_rejects_unexpected_tool():
     conn = ScriptedCompletionConnection([make_tool_call_completion("do_something_else", '{}')])
-    agent = ReasoningAgent(_spec(), _REASONING_MODEL, cast(LlmConnection, conn))
+    agent = ReasoningAgent(make_spec(), FAKE_TOOLS_MODEL, cast(LlmConnection, conn))
 
     with pytest.raises(AgentRunError, match = "do_something_else"):
         agent.run('{}').wait()

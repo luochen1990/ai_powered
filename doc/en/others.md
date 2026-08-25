@@ -7,6 +7,7 @@ This decorator converts ordinary Python functions into tools that can be used by
 
 ```python
 from ai_powered import make_tool
+from ai_powered.utils.safe_eval import safe_eval
 import openai
 
 @make_tool

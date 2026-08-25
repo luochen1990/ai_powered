@@ -53,6 +53,7 @@
         buildInputs = [
           python
           pkgs.poetry
+          pkgs.bubblewrap  # GenericAgent 私有沙盒 (sandbox.py) 的 OS 级隔离后端
         ];
 
         shellHook = ''

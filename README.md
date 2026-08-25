@@ -20,6 +20,7 @@ Features
 3. Full async support and sync compatible (supported by [easy-sync](https://github.com/luochen1990/easy-sync)), use either style you want
 4. Configurable retry on transient failures (network errors, malformed or schema-invalid LLM responses)
 5. Per-function model selection (`model = "provider/name"`) and pluggable execution engines (`agent = YourAgent`, e.g. the built-in multi-turn `ReasoningAgent`)
+6. General-purpose sandboxed agents (`agent = GenericAgent`): the model autonomously runs bash, reads/writes files in an isolated filesystem, and optionally searches the web (bubblewrap on Linux), with execution errors fed back for self-repair
 
 Code Quality Promise
 --------------------
