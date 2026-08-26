@@ -35,6 +35,7 @@
           easy-sync.packages.${system}.easy-sync
           pypkgs.msgspec
           pypkgs.openai
+          pypkgs.requests
         ];
         doCheck = true;
         meta = with pkgs.lib; {
