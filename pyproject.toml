@@ -5,7 +5,11 @@ description = "The easiest way to develop AI-Powered applications"
 authors = [ "Luo Chen <luochen1990@gmail.com>" ]
 repository = "https://github.com/luochen1990/ai_powered"
 readme = "README.md"
-include = ["src"]
+include = [
+    "src",
+    # 内置 bench suite 数据目录 (非包, 无 __init__.py): llm-bench 经 git 依赖安装后 load_suite 要读得到
+    { path = "src/ai_powered/llm_bench/suites", format = ["sdist", "wheel"] },
+]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<4"
@@ -33,6 +37,8 @@ addopts = "-n auto"
 
 [tool.pyright]
 strict = ["all"]
+# bench suite 内容是用例数据 (运行时按路径加载), 合法性由加载时校验 + 单测 + e2e 守护, 不走静态类型门禁
+ignore = ["src/ai_powered/llm_bench/suites"]
 
 [tool.yapf]
 based_on_style = "google"

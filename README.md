@@ -21,6 +21,7 @@ Features
 4. Configurable retry on transient failures (network errors, malformed or schema-invalid LLM responses)
 5. Per-function model selection (`model = "provider/name"`) and pluggable execution engines (`agent = YourAgent`, e.g. the built-in multi-turn `ReasoningAgent`)
 6. General-purpose sandboxed agents (`agent = GenericAgent`): the model autonomously runs bash, reads/writes files in an isolated filesystem, and optionally searches the web (bubblewrap on Linux), with execution errors fed back for self-repair
+7. Hosts the SSOT of the [llm-bench](https://git.lambda.lc/lc-studio/llm-bench) benchmark suites and their format contract (`ai_powered.llm_bench`, one-way dependency llm-bench → ai-powered; boundary rules in `src/ai_powered/llm_bench/AGENTS.md`)
 
 Code Quality Promise
 --------------------
