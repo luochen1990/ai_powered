@@ -84,6 +84,11 @@ class LlmConnection:
         f = sync_compatible(sync_fn = sync_chat_completions)(async_chat_completions)  #type: ignore
         self._chat_completions = f
 
-    @wraps_method_arguments_type(openai.AsyncOpenAI().chat.completions.create)
+    # 签名载体: wraps_method_arguments_type 仅在类型层用其签名做 ParamSpec 绑定, 运行时不调用;
+    # 显式 dummy key 是为消除 import 副作用 — 裸构造在无凭据环境 (下游测试/CLI) import 即崩
+    # (openai 无 key 构造抛错, llm-bench 全链受染; 见 llm-bench#9 P2 排障记录)
+    _CREATE_SIGNATURE = openai.AsyncOpenAI(api_key="type-signature-stub").chat.completions.create
+
+    @wraps_method_arguments_type(_CREATE_SIGNATURE)
     def chat_completions(self, *args: list[Any], **kwargs: dict[str, Any]) -> Waitable[ChatCompletion]:
         return self._chat_completions(*args, **kwargs)
