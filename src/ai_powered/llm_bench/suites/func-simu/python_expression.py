@@ -2,25 +2,19 @@
 # 溯源: ai_powered@test/examples/ai_powered_decorator/calculator.py@a1a39e0 (python_expression_generator)
 # 判定: 可执行 —— 受限沙箱 eval 模型输出的 Python 表达式, 结果值须等于构造时已知的真值
 # 任务面: 输入含非 Python 语法 (^ 幂, sum_from_to(a,b) 即 sum(range(a,b+1))), 模型须转为合法 Python
-# 已知水位差异 (迁移时显式标注, # 注释不参与 digest): 本文件的 _safe_eval 为 bench 侧原版,
-#   字符闸门挡属性链逃逸但无 DoS 静态缓解 (如 9**9**9**9 资源耗尽), 弱于本仓
-#   ai_powered.utils.safe_eval 的水位 (幂指数静态折叠/位数上界); 刻意不复用后者 —— suite 内容
-#   与 bench 侧逐字节等价是迁移契约, 修复须 bench 侧先行 (身份断代协调), 见 ai-powered#12
+# 沙箱水位 (llm-bench#12 上游半): 判定器委托 ai_powered.utils.safe_eval (issue #10 修复产物) —
+#   AST 允许清单门 (fail-closed) + 幂/移位/序列的静态 DoS 缓解 (如 9**9**9**9 资源耗尽被拒)。
+#   取代迁移期的字符闸门原版 (无 DoS 缓解); 原版刻意的 "与 bench 侧逐字节等价" 约束已由分层
+#   digest 的判定段语义取代 — judge 修复 = 同题库不同判定, bench 侧 bump 依赖 rev 后重 pin 即吸收
+# 已知残余: ** 算子操作数含动态量时静态不可判界、无运行时守卫可包装 (如动态底数 + 可折叠
+#   有界指数的组合, utils 头注文档化边界, 与旧实现暴露面相同); 本 judge 为进程内直调,
+#   无 bwrap 兜底档 —— 进程级隔离属后续 backlog
 
 import random
 from typing import Any
 
 from ai_powered.llm_bench import Instance, case
-
-# 受限 eval 白名单 (仅表达式求值所需内置函数)
-_EVAL_BUILTINS: dict[str, Any] = {"sum": sum, "range": range, "min": min, "max": max, "abs": abs, "round": round, "pow": pow}
-
-
-def _safe_eval(expr: str) -> int:
-    """受限表达式求值: 禁属性访问(".")与下划线名("__"), 清空 __builtins__ (表达式逃逸需属性链)"""
-    if len(expr) > 200 or "." in expr or "_" in expr:
-        raise ValueError(f"unsafe or oversized expression: {expr!r}")
-    return eval(expr, {"__builtins__": {}}, _EVAL_BUILTINS)  # noqa: S307 — 输入已过白名单字符闸门
+from ai_powered.utils.safe_eval import safe_eval
 
 
 @case(
@@ -80,6 +74,6 @@ def judge(instance: Instance, output: Any) -> bool:
     if not isinstance(output, str):
         return False
     try:
-        return _safe_eval(output) == instance.expected
+        return safe_eval(output) == instance.expected
     except Exception:  # noqa: BLE001 — 任何求值失败均为不通过
         return False

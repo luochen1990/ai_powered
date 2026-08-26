@@ -10,6 +10,10 @@
     按构造不存在 (__builtins__ = 纯函数 dict 而非 None)
   - 刻意禁 str.format/format_map: 模板 "{0.__class__}" 的属性爬发生在运行期, AST 门看不见;
     f-string 是被 AST 门控的安全等价物
+  - pow() 与 ** 算子同水位防护, 双防线 (llm-bench#12): 静态门 (_guard_pow_call: 仅接受 2/3 个
+    字面位置参数, 星号/关键字静态不可判界 → 拒; 3 参 modpow 结果本受 mod 界定, 统一按前两参
+    守卫, fail-closed 一致性) + 命名空间内 pow 恒为值级运行时守卫包装 (_guarded_pow, 按实参
+    判界 —— 别名/高阶通路走私的 pow 值终将实际调用它, 在此兜住)
   - 语义保持: 纯表达式求值返回值; SyntaxError 与运行期错误 (除零/未定义名) 自然传播, 与 eval 同形
 
 已知边界 (诚实标注):
@@ -34,13 +38,31 @@ class SafeEvalViolation(ValueError):
 
 
 #: 受控命名空间: 纯函数 + 数据构造子 (不含 print/异常类型 —— 纯表达式求值用不到;
-#: 不含 open/getattr/globals 等一切带副作用或反射能力的名字)
+#: 不含 open/getattr/globals 等一切带副作用或反射能力的名字; pow 为纯数学函数, 双防线防护见 _guarded_pow)
 _PURE_BUILTINS_NAMES = (
     "abs", "all", "any", "bool", "dict", "divmod", "enumerate", "filter", "float", "format", "int",
-    "isinstance", "len", "list", "map", "max", "min", "range", "repr", "reversed", "round",
+    "isinstance", "len", "list", "map", "max", "min", "pow", "range", "repr", "reversed", "round",
     "set", "sorted", "str", "sum", "tuple", "zip",
 )
+
+
+def _guarded_pow(base: Any, exp: Any, mod: Any = None) -> Any:
+    ''' pow 的值级运行时守卫 (llm-bench#12): 静态门守 "名字叫 pow 的调用", 别名/高阶通路
+    (推导式绑定 p=[pow]、map(pow, ...)) 走私的 pow **值** 在此按实参判界 —— 与静态幂守卫
+    (_guard_pow) 同水位, 且以实际值判界还额外覆盖了静态层文档化放行的动态底数。
+    非 int 指数不拦 (float/complex 幂不构造大整数, 原生 OverflowError/TypeError 自然传播);
+    字面指数另受静态层折叠与 |exp| 上界约束, 此处只兜高阶通路的动态量 '''
+    if isinstance(base, int) and isinstance(exp, int):
+        # 消息勿插值实参值: 大整数的 str 转换有 4300 位上限
+        if abs(exp) > _MAX_POW_EXPONENT:
+            raise SafeEvalViolation(f"pow exponent |value| > {_MAX_POW_EXPONENT} (runtime guard, static DoS mitigation)")
+        if mod is None and exp >= 0 and exp * base.bit_length() > _MAX_FOLD_BITS:
+            raise SafeEvalViolation("pow result too large (runtime guard, static DoS mitigation)")
+    return pow(base, exp) if mod is None else pow(base, exp, mod)
+
+
 _PURE_BUILTINS: dict[str, Any] = {name: getattr(builtins, name) for name in _PURE_BUILTINS_NAMES}
+_PURE_BUILTINS["pow"] = _guarded_pow  # 值级守卫: 命名空间里的 pow 恒为包装版 (走私通路终将实际调用它)
 
 #: 方法名白名单 (Attribute 访问与方法调用共用): 纯数据结构方法族; 刻意不含 format/format_map (见文件头)
 _ALLOWED_METHODS = frozenset((
@@ -276,6 +298,30 @@ def _fold_uncached(node: ast.AST, cache: dict[int, _FoldResult]) -> _FoldResult:
     return value
 
 
+def _guard_pow(base_node: ast.expr, exp_node: ast.expr, fold_cache: dict[int, _FoldResult], literal_cache: dict[int, bool]) -> None:
+    ''' 幂守卫 (** 算子与 pow() 调用共用, llm-bench#12): 指数须静态折叠且 |指数| 有界;
+    底数折叠为巨型、或字面纯而不可判界 → 拒; 双 int 时按位数预算判结果量级
+    (单次幂即限 ~5KB, 链式相乘的各因子随之受限) '''
+    base = _fold_const(base_node, fold_cache)
+    exp = _fold_const(exp_node, fold_cache)
+    if not isinstance(exp, (int, float, complex)) or abs(exp) > _MAX_POW_EXPONENT:
+        raise SafeEvalViolation(f"pow exponent must fold to a constant with |value| <= {_MAX_POW_EXPONENT} (static DoS mitigation)")
+    if isinstance(base, _Huge):  # 每层指数达标但底数复合成巨型 (如 ((2**4096)**4096)**4096) 同样拒
+        raise SafeEvalViolation("pow base too large (static DoS mitigation)")
+    if base is None:
+        if _is_literal_pure(base_node, literal_cache):  # 字面条件/下标等折叠盲区藏底数 → fail-closed
+            raise SafeEvalViolation("literal pow with statically unbounded base is rejected (fail-closed)")
+    elif isinstance(base, int) and isinstance(exp, int) and exp >= 0 and exp * base.bit_length() > _MAX_FOLD_BITS:
+        raise SafeEvalViolation("pow result too large (static DoS mitigation)")  # 数值结果量级判界
+
+
+def _guard_pow_call(node: ast.Call, fold_cache: dict[int, _FoldResult], literal_cache: dict[int, bool]) -> None:
+    ''' pow() 调用与 ** 算子同水位防护 (见文件头设计注): 星号展开/关键字/非 2-3 参静态不可判界, 一律拒 '''
+    if node.keywords or not 2 <= len(node.args) <= 3 or any(isinstance(a, ast.Starred) for a in node.args):
+        raise SafeEvalViolation("pow() accepts only 2 or 3 literal positional arguments (static DoS mitigation)")
+    _guard_pow(node.args[0], node.args[1], fold_cache, literal_cache)
+
+
 def _gate(nodes: list[ast.AST]) -> None:
     ''' 声明式白名单检查: 未知节点 / dunder 标识符 / 白名单外调用与属性 / 幂指数与序列尺寸守卫 '''
     local_names = {n.id for n in nodes if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)}  # 推导式绑定名
@@ -298,6 +344,8 @@ def _gate(nodes: list[ast.AST]) -> None:
             if isinstance(func, ast.Name):
                 if func.id not in callable_names:
                     raise SafeEvalViolation(f"disallowed function call: {func.id}()")
+                if func.id == "pow":
+                    _guard_pow_call(node, fold_cache, literal_cache)
             elif isinstance(func, ast.Attribute):
                 pass  # 方法调用: attr 已由 Attribute 分支对方法白名单判定
             else:
@@ -308,17 +356,7 @@ def _gate(nodes: list[ast.AST]) -> None:
             if _formats_string(node.left, literal_cache):  # 数值取模放行; 字面纯 % 格式化按 str.format 同类拒绝
                 raise SafeEvalViolation("literal % formatting is rejected: width/precision is not statically bounded (fail-closed)")
         elif isinstance(node, ast.BinOp) and isinstance(node.op, ast.Pow):
-            base = _fold_const(node.left, fold_cache)
-            exp = _fold_const(node.right, fold_cache)
-            if not isinstance(exp, (int, float, complex)) or abs(exp) > _MAX_POW_EXPONENT:
-                raise SafeEvalViolation(f"pow exponent must fold to a constant with |value| <= {_MAX_POW_EXPONENT} (static DoS mitigation)")
-            if isinstance(base, _Huge):  # 每层指数达标但底数复合成巨型 (如 ((2**4096)**4096)**4096) 同样拒
-                raise SafeEvalViolation("pow base too large (static DoS mitigation)")
-            if base is None:
-                if _is_literal_pure(node.left, literal_cache):  # 字面条件/下标等折叠盲区藏底数 → fail-closed
-                    raise SafeEvalViolation("literal pow with statically unbounded base is rejected (fail-closed)")
-            elif isinstance(base, int) and isinstance(exp, int) and exp >= 0 and exp * base.bit_length() > _MAX_FOLD_BITS:
-                raise SafeEvalViolation("pow result too large (static DoS mitigation)")  # 数值结果量级判界: 单次幂即限 ~5KB, 链式相乘的各因子随之受限
+            _guard_pow(node.left, node.right, fold_cache, literal_cache)
         elif isinstance(node, ast.BinOp) and isinstance(node.op, ast.LShift):
             left = _fold_const(node.left, fold_cache)
             shift = _fold_const(node.right, fold_cache)

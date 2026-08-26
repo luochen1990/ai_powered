@@ -4,6 +4,11 @@
 #           / 加载校验负例 / judge 行为 (逻辑性 bug 不改 digest, 金丝雀不报警, 须直接测)
 # e2e (真实 LLM 调用) 见 test/examples/llm_bench_suite/func_simu.py
 
+import os
+import random
+import re
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -20,14 +25,18 @@ _FUNC_SIMU = _SUITES_DIR / "func-simu"
 # 格式: 分层 "<prompt>*<distribution>:<judging>" (各段 16 hex); 前缀比较 = 粒度选择
 # 历史: 8293206f38069762 (P1 迁移, 单级) → 62e67dd03c540281 (两级化+name/rotation 出哈希)
 #       → 7b906e2e01c394f2 (@case 元数据剔除) → 分层三段 (段级联; 均为算法断代非内容断代)
-PINNED_FUNC_SIMU_DIGEST = "07696cf4d703b064*7fb424258ad23a0b:9701dd524a92f3fd"
+#       → 07696cf4d703b064*7fb424258ad23a0b:9701dd524a92f3fd (分层格式首版)
+# 重 pin (llm-bench#12 上游半, 内容断代·仅判定段): python_expression judge 委托 utils.safe_eval
+#       (DoS 静态缓解) — 题型/分布段与其余 6 case 不变; bench 侧 bump rev 后重 pin 吸收
+PINNED_FUNC_SIMU_DIGEST = "07696cf4d703b064*7fb424258ad23a0b:533b410397ba5934"
 PINNED_CASE_DIGESTS = {
     "func-simu/add": "a4cf80aa48805fc8*97c515322ac7c10a:03ea3778f24e91d8",
     "func-simu/binary-search": "359eebb244b2c658*f963852e3536a136:e3693aeeed72a44c",
     "func-simu/extract-user-info": "c0fe2f17a847f08b*ebaba4561892bf2a:222369c8936cbba4",
     "func-simu/gen-json-data": "a46ac50af8a9287a*803eabba35ea0e4c:e392d3680e627792",
     "func-simu/gen-user-info": "b063e29a556ebf95*5f0803cbc88e71b0:cd8bd2d0900b1843",
-    "func-simu/python-expression": "b980a939e4542ebe*6a6b4ff4af611ee5:1644e4342bd833b5",
+    # 判定段 1644e4342bd833b5 → 7246319b7f09ec3d (llm-bench#12: judge 委托 utils.safe_eval)
+    "func-simu/python-expression": "b980a939e4542ebe*6a6b4ff4af611ee5:7246319b7f09ec3d",
     "func-simu/sort-desc": "1d49eeb6a2e64682*d5d4abf62ad38e97:c438ab044700d112",
 }
 
@@ -433,6 +442,77 @@ def test_judge_python_expression_eval_equality() -> None:
     assert not judge(Instance(args={"expr": "2^3"}, expected=8), "2*3")  # 值不等
     assert not judge(Instance(args={"expr": "2^3"}, expected=8), "__import__('os')")  # 含下划线被拒
     assert not judge(Instance(args={"expr": "2^3"}, expected=8), 42)  # 非 str
+
+
+# --- python_expression judge 的 DoS 缓解与良性语义守护 (llm-bench#12 上游半) ---
+
+#: 攻击样本 = 被测模型的原始响应 (judge 的直接输入): 资源耗尽族, 修复后须全拒 (judge → False)
+_DOS_ATTACK_OUTPUTS = [
+    "9**9**9**9",  # 右结合幂链: 求值构造天文数字大整数
+    "2 ** " * 1500 + "2",  # 深链幂 (静态分析递归超栈须收敛为拒绝)
+    "pow(9, 9 ** 9)",  # 调用面等价物 (pow 入白名单后与 ** 算子同水位防护)
+    "'a' * (10 ** 9)",  # 长序列构造: 重复
+    "[0] * (2 ** 30)",  # 长序列构造: 列表重复
+    "([0] * 10 ** 5 + [0] * 10 ** 5) * 10 ** 5",  # 长序列构造: 拼接复合
+]
+
+
+def test_judge_python_expression_dos_outputs_rejected_bounded() -> None:
+    """DoS 样本经 judge 全拒且有界时间内收敛 (llm-bench#12)。
+    子进程 + 超时隔离: 防御失效 (回归) 时表现为本测试快速失败, 而非 judge 挂死/OOM 测试进程本身。
+    甄别力双通道: 非超时样本以 "守卫明确拒绝 (SafeEvalViolation, 非求值错误被吞)" 失败;
+    挂死型样本 (9**9**9**9 等) 由超时兜底 — 甄别不集中于单一样本"""
+    child = (
+        "from pathlib import Path\n"
+        "import sys\n"
+        "from ai_powered.llm_bench import Instance\n"
+        "from ai_powered.llm_bench.cases import _import_module\n"
+        "from ai_powered.utils.safe_eval import SafeEvalViolation, safe_eval\n"
+        "mod = _import_module(Path(sys.argv[1]), 'pe_case')\n"
+        "inst = Instance(args={'expr': '2^3'}, expected=8)\n"
+        "for out in sys.argv[2:]:\n"
+        "    try:\n"
+        "        safe_eval(out)\n"
+        "    except SafeEvalViolation:\n"
+        "        pass\n"
+        "    else:\n"
+        "        raise AssertionError(f'not rejected by guard: {out[:60]}')\n"
+        "    assert not mod.judge(inst, out), f'dos output accepted: {out[:60]}'\n"
+        "print('OK')\n"
+    )
+    # PYTHONPATH 从已导入包自身推导 (对齐 test_sandbox.py 先例): 防 worktree 场景 editable-install 指向主仓库旧代码
+    env = {**os.environ, "PYTHONPATH": str(Path(apb.__file__).resolve().parents[2])}
+    proc = subprocess.run(
+        [sys.executable, "-c", child, str(_FUNC_SIMU / "python_expression.py"), *_DOS_ATTACK_OUTPUTS],
+        capture_output=True, text=True, timeout=30, env=env,
+    )
+    assert proc.returncode == 0, f"dos sample escaped guard or crashed: rc={proc.returncode} stderr={proc.stderr}"
+    assert proc.stdout.strip() == "OK"
+
+
+def _canonical_translation(expr: str) -> str:
+    """gen 表面文本的机械正确译法 (模拟满分模型): ^ → **, sum_from_to(a, b) → sum(range(a, b + 1))"""
+    body = re.sub(r"sum_from_to\((\d+), (\d+)\)", r"sum(range(\1, \2 + 1))", expr)
+    return body.replace("^", "**")
+
+
+def test_judge_python_expression_benign_semantics_preserved() -> None:
+    """良性判定语义不变 (llm-bench#12 DoD): gen 域全部实例的机械正确译法必须通过 ——
+    DoS 加固只拒攻击样本, 不得误伤正确答案; 显式钉各题型的规范译法 (含 pow, bench 侧已 pin 的语义)"""
+    case = _case("func-simu/python-expression")
+    assert case.judge is not None
+    for inst in case.gen(random.Random(20260826), 50):
+        assert case.judge(inst, _canonical_translation(inst.args["expr"])), f"benign output rejected: {inst.args['expr']!r}"
+    pinned = [
+        ("2^3", "2 ** 3", 8),  # ^ → ** 直译
+        ("2^3", "pow(2, 3)", 8),  # ^ → pow 内置函数译法
+        ("sum_from_to(1, 4)", "sum(range(1, 5))", 10),  # 求和函数译法
+        ("(5 + 3) * 2", "(5 + 3) * 2", 16),
+        ("(3 - 20)", "(3 - 20)", -17),  # 负值真值
+    ]
+    for surface, output, expected in pinned:
+        assert case.judge(Instance(args={"expr": surface}, expected=expected), output), output
+        assert not case.judge(Instance(args={"expr": surface}, expected=expected), f"({output}) + 1")  # 值错拒
 
 
 def test_judge_gen_user_info_structure() -> None:

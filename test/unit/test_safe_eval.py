@@ -74,6 +74,15 @@ ATTACK_SAMPLES = {
     "pow huge base nested": "((2 ** 4096) ** 4096) ** 4096",
     "fold digit-limit escape via mult": "[0] * (((10 ** 7) ** 1000) ** 1)",
     "fold digit-limit escape via pow": "2 ** (((10 ** 7) ** 1000) ** 1)",
+    "pow call bomb exponent": "pow(2, 999999999)",
+    "pow call bomb nested": "pow(9, 9 ** 9)",
+    "pow call bomb folded chain": "pow(9, pow(9, 9))",
+    "pow call bomb base": "pow(2 ** 4096, 4096)",
+    "pow call starred args": "pow(*[2, 10])",
+    "pow call keyword args": "pow(base=2, exp=10)",
+    "pow value smuggle via comprehension": "sum(p(2, 10 ** 9) for p in [pow])",
+    "pow value smuggle via map": "list(map(pow, [2], [10 ** 9]))",
+    "lambda param call rejected by name gate": "[f(pow) for f in (lambda p: p(2, 10 ** 9))][0]",
     "walrus assignment": "(x := 5)",
     "dunder argument name": "(lambda __x: __x)",
     "dunder comprehension var": "[__x for __x in ()]",
@@ -121,6 +130,8 @@ CONSERVATIVE_REJECTIONS = {
     "dict repetition": "{1: 2} * 2",  # 非序列容器 × 数 → 长度不可判
     "unfoldable compare shift": "1 << (1 < 2)",  # Compare 结果不作折叠移位量
     "unfoldable compare pow base": "(1 < 2) ** 2",  # Compare 结果不作折叠底数
+    "pow call mod bounded base": "pow(2 ** 4096, 4000, 7)",  # 3 参 modpow 结果受 mod 界定, 统一按前两参守卫 (一致性)
+    "pow call dynamic exponent": "pow(2, len('ab'))",  # 动态指数与 ** 算子同拒
 }
 
 
@@ -185,6 +196,9 @@ BENIGN_CORPUS = [
     "set([1, 2, 2, 3])",
     "int('42') + float('0.5')",
     "max(*[1, 5, 3])",
+    "pow(2, 10)",
+    "pow(2, 10, 7)",
+    "pow(9, 0.5)",
 ]
 
 
