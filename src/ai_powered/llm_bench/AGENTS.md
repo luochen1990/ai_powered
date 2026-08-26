@@ -7,7 +7,7 @@ llm-bench 仓单向 runtime 依赖本包，其 `cases.py` 薄化为 re-export；
 ## 结构
 
 - `cases.py` — 格式契约（`@case` / `Instance` / `SuiteMeta` / `CaseMeta` / MISSING 哨兵）+ suite 发现/加载/加载时校验。加载器只此一份
-- `suite_digest.py` + `canonical.py` — suite 内容指纹（digest）。`case_files()` 发现规则与 `load_suite` 共用，保证 "digest 覆盖集 == 实际加载集" 永不漂移
+- `suite_digest.py` + `canonical.py` — suite 内容指纹（**分层两级**：per-case 三段 `题型*分布:判定` + 按 case id 聚合的 suite 合串；**前缀比较 = 粒度选择**：段1 ⟺ 同题型、段1\*段2 ⟺ 同题库、全串 ⟺ 统计可比）。级联构造、归层规则、剔除项（种子/name/rotation/@case 元数据）等契约见 `suite_digest.py` 头注（SSOT）。`case_files()` 发现规则与 `load_suite` 共用，保证 "digest 覆盖集 == 实际加载集" 永不漂移；case id 从 `@case(id=...)` 字面量提取（一文件一 @case、非字面量 id、重复 id、空 suite 均 fail-fast）
 - `suites/` — 纯数据目录（**非包**，无 `__init__.py`，运行时按路径逐文件加载）。当前含 `func-simu/`（溯源自 `test/examples/ai_powered_decorator@a1a39e0`；相对上游的有意偏离已在各文件头注标注）
 
 ## 边界纪律

@@ -27,7 +27,7 @@ from typing import Any, Callable, Literal, cast
 
 import msgspec
 
-from .suite_digest import case_files, suite_digest
+from .suite_digest import LayeredDigest, case_files, suite_digest, suite_digest_from_cases, suite_digests
 
 # "无期望值" 哨兵: 与 None (合法期望值) 区分
 MISSING: Any = object()
@@ -74,6 +74,7 @@ class Case:
     fn: Callable[..., Any]  # 任务声明函数 (函数体恒为 ..., 永不本地执行)
     gen: GenFn
     judge: JudgeFn | None
+    digest: LayeredDigest  # per-case 分层指纹 (题型*分布:判定; str() 成串, bench payload P3b 消费)
 
 
 @dataclass
@@ -83,7 +84,7 @@ class Suite:
     name: str
     rotation: Literal["day", "week"]
     description: str
-    digest: str  # 内容指纹 (suite_digest.py), suite 身份的机械判定
+    digest: str  # suite 级分层指纹合串 "<prompt>*<distribution>:<judging>" (suite_digest.py)
     cases: list[Case]  # 按 case id 排序
 
 
@@ -176,7 +177,7 @@ def builtin_suite_digests() -> dict[str, str]:
         if not (suite_dir / "suite.py").exists():
             continue
         meta = _load_suite_meta(suite_dir)
-        result[meta.name] = suite_digest(suite_dir, meta.name, meta.rotation)
+        result[meta.name] = suite_digest(suite_dir)
     return result
 
 
@@ -189,6 +190,9 @@ def load_suite(suite_dir: Path) -> Suite:
 
     # 探针种子: 仅用于加载校验, 与任何真实跑分种子空间无碰撞语义 (bench 侧种子机制见 llm_bench.seeding)
     probe_seed = -1
+
+    # per-case 指纹先算 (重复 id 在此 fail-fast); 加载与哈希的 id 来自同一文件的 @case 字面量
+    case_digests = suite_digests(suite_dir)
 
     cases: list[Case] = []
     for path in case_files(suite_dir):
@@ -210,13 +214,14 @@ def load_suite(suite_dir: Path) -> Suite:
         judge_attr = getattr(module, "judge", None)
         judge_fn: JudgeFn | None = cast(JudgeFn, judge_attr) if callable(judge_attr) else None
 
-        loaded = Case(meta=case_meta, fn=case_fn, gen=gen_fn, judge=judge_fn)
+        if case_meta.id not in case_digests:
+            raise ValueError(f"[{case_meta.id}] loaded case id not in digest map (file changed during load?)")
+        loaded = Case(meta=case_meta, fn=case_fn, gen=gen_fn, judge=judge_fn, digest=case_digests[case_meta.id])
         _validate_case(loaded, probe_seed)
         cases.append(loaded)
 
-    if not cases:
-        raise ValueError(f"no cases found in {suite_dir}")
+    # 空 suite 由 suite_digests 守卫先行拒绝 (no case files found), 此处不必重复检查
     cases.sort(key=lambda c: c.meta.id)
 
-    digest = suite_digest(suite_dir, meta.name, meta.rotation)
+    digest = suite_digest_from_cases(case_digests)
     return Suite(name=meta.name, rotation=meta.rotation, description=meta.description, digest=digest, cases=cases)

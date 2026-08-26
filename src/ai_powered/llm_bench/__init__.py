@@ -19,5 +19,8 @@ from .cases import builtin_suite_digests as builtin_suite_digests
 from .cases import case as case
 from .cases import load_suite as load_suite
 from .suite_digest import DIGEST_LEN as DIGEST_LEN
+from .suite_digest import LayeredDigest as LayeredDigest
 from .suite_digest import case_files as case_files
 from .suite_digest import suite_digest as suite_digest
+from .suite_digest import suite_digest_from_cases as suite_digest_from_cases
+from .suite_digest import suite_digests as suite_digests
