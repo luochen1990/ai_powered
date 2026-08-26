@@ -12,8 +12,10 @@
 #
 # LLM provider: 本机 secret-guard 免费池 (2026-08-26 切换, OpenRouter → sg, 见选型史).
 # 链路: VM (10.168.0.226/br-microvm) → 宿主网关 10.168.0.1:18787 (secret-guard,
-# 0.0.0.0 监听, firewall 放行规则见 nixos 仓 home-pc configuration.nix / nixos#601)
-# → /o/free 路由 → opencode zen 免费池 (api_key 公开字面量 public, 无限额账户约束).
+# 0.0.0.0 监听) → /o/free 路由 → opencode zen 免费池 (api_key 公开字面量 public,
+# 无限额账户约束). VM→宿主可达性: 实测现有配置即通 (CI 端到端验证过; 曾疑 firewall
+# 阻挡, 系 curl -m 3 把 zen 慢响应超时误读为连接拒绝); nixos#601 的
+# br-microvm:18787 显式放行已合并 (防御性声明, 使可达性不依赖隐式通路).
 # 模型 x-preview-f-free (Ox Alpha Free Unlimited): sg free 池钦点兜底模型 (default-plan
 # 同款); 实测 zen 免费池对请求 model 有 soft-fallback (任意 model 名实际多被服务为
 # x-preview-f-free, 响应 model 字段才是真实模型), 故直接请求实际服务模型名.
