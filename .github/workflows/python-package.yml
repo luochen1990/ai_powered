@@ -40,9 +40,16 @@ jobs:
         fi
     - name: Test with coverage
       env:
-        # LLM provider: OpenRouter 免费层, 与 forgejo CI (.forgejo/workflows/ci.yml)
-        # 同模型同配置 (选型史/稳定性论证见该文件头). features pin 与 extra_body
-        # (关 thinking + temperature 0) 是路径等价与复现性的必要配置, 两端保持一致.
+        # LLM provider: OpenRouter 免费层 nvidia/nemotron-3-super-120b-a12b:free.
+        # 2026-09-01 起与 forgejo CI (.forgejo/workflows/ci.yml) 基线分叉: forgejo 侧
+        # (境内 VM) 已切本机 sg 网关 default-plan/flash (glm-5.3-flash); GitHub 境外
+        # runner 不可达 LAN 网关, 维持 OpenRouter. 两端已非 "同模型同配置":
+        # - features: 此处 tools,seed,structured_outputs,strict_mode (OpenRouter 端点
+        #   支持 response_format json_schema); forgejo 侧 pin tools (智谱端点丢参数,
+        #   见其文件头 FEATURES 注).
+        # - thinking: 此处显式关 reasoning (复现性); forgejo 侧保留 thinking 开启
+        #   (func-simu/gen-json-data 的 xpass 依赖 reasoning, 见其选型史).
+        # temperature 0 两端一致 (复现性基线).
         OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         OPENAI_BASE_URL: https://openrouter.ai/api/v1
         OPENAI_MODEL_NAME: nvidia/nemotron-3-super-120b-a12b:free

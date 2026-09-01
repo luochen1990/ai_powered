@@ -10,34 +10,53 @@
 # 触发去重: PR 事件总是跑; push 仅 master (feature branch 的 push 由 PR 覆盖, 避免双跑).
 # concurrency 按 PR 分组去旧: runner capacity=1 串行, 旧 run 占位会延迟最新 push 的反馈.
 #
-# LLM provider: 本机 secret-guard 免费池 (2026-08-26 切换, OpenRouter → sg, 见选型史).
+# LLM provider: 本机 secret-guard default-plan 入口 (2026-09-01 由免费池 /o/free 切换,
+# 选型动机与验证数据见选型史).
 # 链路: VM (10.168.0.226/br-microvm) → 宿主网关 10.168.0.1:18787 (secret-guard,
-# 0.0.0.0 监听) → /o/free 路由 → opencode zen 免费池 (api_key 公开字面量 public,
-# 无限额账户约束). VM→宿主可达性: 实测现有配置即通 (CI 端到端验证过; 曾疑 firewall
-# 阻挡, 系 curl -m 3 把 zen 慢响应超时误读为连接拒绝); nixos#601 的
-# br-microvm:18787 显式放行已合并 (防御性声明, 使可达性不依赖隐式通路).
-# 模型 ultra (sg free router 稳定别名, 当前服务 nemotron-3-ultra-free): 免费池换将
-# 由 nixos 仓 free-providers.nix 别名层吸收, 上游下架只改那边 aliases 表, 本文件零
-# 改动 (2026-09-01 x-preview-f-free 上游下架 401 "Model not supported" 教训: 不再
-# 硬编码具体模型 id). 代价: 无端变红时本仓无 diff 可归因 — 先查那边 aliases 表近期变更;
+# 0.0.0.0 监听) → /o/default-plan 路由 → 智谱 coding plan 套餐主出口 glm-5.3-flash.
+# 网关同免费池时代完全相同 (同一 host:port), VM→宿主可达性与 nixos#601 的
+# br-microvm:18787 显式放行不变 (曾疑 firewall 阻挡, 系 curl -m 3 把慢响应超时
+# 误读为连接拒绝的教训仍适用).
+# 模型 flash (sg default-plan router 稳定别名, 当前出口 glm-5.3-flash): 出口/换档
+# 由 nixos 仓 default-plan.nix 路由表吸收 (alias → 具体模型映射在那边; 上游/套餐
+# 变化只改那张表, 本文件零改动 — 承袭免费池别名策略, 教训见选型史 x-preview-f-free
+# 条). 代价: 无端变红时本仓无 diff 可归因 — 先查那边 default-plan.nix 近期变更;
 # DEBUG 日志里响应 model 字段即实际服务模型 (别名只是请求侧稳定名).
-# FEATURES pin=tools (仅此一项!): 实测 zen 池忽略 response_format json_schema (返回
-# markdown 文本无约束解码) → structured_outputs 不可用, 必须走 tools 适配器路径
-# (tools 调用实测正常). base_url "10.168.0.1:18787/o/free" 不含已知平台子串, 本就
-# 落入未知平台默认 {tools}, pin 显式同值防默认漂移.
-# EXTRA_BODY 只留 temperature 0 (复现性): OpenRouter 的 reasoning 开关参数在 zen 无
-# 对应物 (实测过的 zen 免费池成员均自带 reasoning 输出不可关, tools 路径解析不受其扰).
+# 辨析: 此 flash 非选型史里被弃的 "sg 免费池 flash 档" (nemotron-3.5-lightning-free)
+# — 同名别名, 不同池不同模型; glm-5.3-flash 门禁 tools/chat/复现性达标 + 全量实测
+# 全绿 (见选型史).
+# FEATURES pin=tools (仅此一项!): 智谱 coding 端点静默丢弃 response_format
+# json_schema (2026-09-01 实测: 模型 reasoning 自述 "no schema is provided", 返回
+# markdown 围栏无约束解码) → structured_outputs 不可用, 必须走 tools 适配器路径
+# (tools 调用实测正常). base_url "10.168.0.1:18787/o/default-plan" 不含已知平台
+# 子串, 本就落入未知平台默认 {tools}, pin 显式同值防默认漂移.
+# EXTRA_BODY 只留 temperature 0 (复现性): glm-5.3-flash 默认开 thinking (部分调用
+# reasoning_content 达数百 token), 实测 thinking 参数可关 ({"thinking":{"type":
+# "disabled"}} 生效) 但不关 — 全量套件在 thinking 开启下实测全绿, 且 func-simu/
+# gen-json-data 的 xpass 依赖 reasoning; 复现性验证 (tools 路径 temp=0 五连发)
+# 输出完全一致.
 # 选型史 (scripts/model_baseline.py 门禁 + 全量 pytest, 2026-08~09):
+#   - sg default-plan flash 档 (glm-5.3-flash, 2026-09-01 切换, 现行): 门禁 baseline
+#     tools 3/3 + chat fallback 3/3 + 复现性 ✓ (structured_output 0/3 — 端点丢参数,
+#     非模型能力问题, 见文件头 FEATURES 注); 全量 pytest VM 等价并发 (-n2, VM vcpu=2)
+#     368 passed + 4 xpassed, 0 rerun, 5m40s; 串行 (-n0) 同样 0 rerun. 32 路极限突发
+#     (-n auto 本机) 24 rerun — 智谱并发限流, reruns 全数吸收, VM 2 worker 不及该
+#     并发. 走套餐主出口: 无免费池 503 风暴 (~25-30% 基础概率) 与上游随时换将风险.
 #   - OpenRouter 免费层 nvidia/nemotron-3-super-120b-a12b:free (120B MoE, tools+结构化
 #     输出双支持): 能力/复现性实测帕累托最优, 但 1000/day (充 $10 档) 是账户级全
 #     :free 模型共享额度 (非 per-model, 换模型不能绕), 2026-08-26 被 9 次全量 CI 烧穿
 #     (429 风暴), 密集迭代日结构性复发 → 弃, 仅 GitHub CI (境外 runner) 继续使用.
-#   - sg 免费池 (ultra): 实测 examples e2e (Test 步全量) 41 passed + 4 xfailed
-#     全绿 (4m03s, reruns 策略见 Test 步注); 上游 503 风暴由 reruns 时间隔离吸收;
-#     延迟低于 openrouter 出境链路.
-#   - sg 免费池 flash 档 (nemotron-3.5-lightning-free, 2026-09-01 实测弃):
-#     test_extract_identity (LLM 往返一致性) 三轮两败 (flaky reruns=3 下各 4 次
-#     尝试连败), 属该档系统性能力边界; ultra 档同测试稳定通过.
+#   - sg 免费池 ultra 档 (2026-09-01 在用约半日, 免费池时代收尾, 后让位
+#     default-plan; 08-26 切入免费池时先为 x-preview-f-free, 见下条): 实测
+#     examples e2e 子集 41 passed + 4 xfailed 全绿 (45 结果, 非 Test 步全量 ~370;
+#     4m03s, reruns 策略见 Test 步注); 上游 (opencode zen) 503 "Endpoint is
+#     unavailable" 风暴基础概率 ~25-30% 且成分钟级窗 (SDK 短退避 max_retries=2,
+#     <8s 打不出去), 由 reruns 时间隔离吸收; 弃因: 上游换将不可控 + 503 风暴常态化
+#     的重试开销, 换 sg 套餐主出口.
+#   - sg 免费池 flash 档 (nemotron-3.5-lightning-free, 2026-09-01 实测弃; 与现行
+#     default-plan flash 同名不同模型, 见文件头辨析): test_extract_identity (LLM
+#     往返一致性) 三轮两败 (flaky reruns=3 下各 4 次尝试连败), 属该档系统性能力边界;
+#     ultra 档同测试稳定通过.
 #   - x-preview-f-free (2026-08-26 选定, 2026-09-01 上游下架): 曾实测 37 passed
 #     + 4 xpassed (58s); 下架后请求 401 "Model not supported", CI 全红 — 具体模型
 #     id 硬编码的结构性风险由此暴露, 已改用别名.
@@ -71,20 +90,24 @@ jobs:
   check:
     runs-on: vm-nix
     # timeout 是硬上限 (超时算 job failure 阻塞合并), 取宽松预算: 热路径 (venv 复用)
-    # 实测 ~6min (ultra 档 + 503 rerun 开销); 冷路径 (建 venv + 全量装依赖) 再叠加
-    # 的最坏情况留足余量. 注意 503 风暴若持续 >10min, rerun delay 会拖长 job 至撞
-    # 此硬上限 (判红但多占 capacity=1 串行 runner 30min, 属该故障模式的已知代价).
+    # 实测 job 整体 ~6min 量级 (default-plan flash 本机 -n2 pytest 步 5m40s +
+    # checkout/poetry sync/pyright/flake8 开销, 与免费池 ultra 时代相当); 冷路径
+    # (建 venv + 全量装依赖) 再叠加的最坏情况留足余量.
+    # 注意传输噪声/限流风暴若持续 >10min, rerun delay 会拖长 job 至撞此硬上限 (判红
+    # 但多占 capacity=1 串行 runner 30min, 属该故障模式的已知代价).
     # (qwen3.6:27b 时代 30min 真超时过, 见文件头选型史.)
     timeout-minutes: 30
     env:
       VIRTUAL_ENV: /var/lib/forgejo-runner/cache/ai-powered-venv
       POETRY_CACHE_DIR: /var/lib/forgejo-runner/cache/poetry
-      # LLM provider: sg 免费池 (选型依据见文件头). api_key 为公开字面量 public
-      # (opencode zen 免费池无需真实凭据), 不占 repo secret. FEATURES pin=tools:
-      # 见文件头 (structured_outputs 实测不可用, tools 适配器路径).
+      # LLM provider: sg default-plan 入口 (选型依据见文件头). api_key 为公开字面量
+      # public (sg 主实例无 IdP, 边缘任意 bearer 均可, 智谱真实凭据由 sg 注入),
+      # 不占 repo secret. 风险面: 同网关背后由免费池变为付费套餐配额, LAN 内可达
+      # 10.168.0.1:18787 的设备均可消耗配额 — 暴露面限家庭内网, 属可接受.
+      # FEATURES pin=tools: 见文件头 (structured_outputs 实测不可用, tools 适配器路径).
       OPENAI_API_KEY: public
-      OPENAI_BASE_URL: http://10.168.0.1:18787/o/free
-      OPENAI_MODEL_NAME: ultra
+      OPENAI_BASE_URL: http://10.168.0.1:18787/o/default-plan
+      OPENAI_MODEL_NAME: flash
       OPENAI_MODEL_FEATURES: tools
       # temperature 0 对齐 baseline 脚本复现性方法论, 显著降低输出随机性 (实测
       # test_extract_identity 失败率 ~17% -> 个位数).
@@ -151,16 +174,18 @@ jobs:
           # 阻塞子集与 GitHub CI / just check 对齐: 语法错误 + 未定义名
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
 
-      # 功能测试走全链路 (test/examples/), LLM 端点为 sg 免费池 (宿主 secret-guard).
+      # 功能测试走全链路 (test/examples/), LLM 端点为 sg default-plan (宿主
+      # secret-guard → 智谱套餐主出口).
       # deselect use_google_search: 该测试经 google_search 工具直连 googleapis.com,
       # runner VM 网络不出境 (实测 SYN-SENT 无限挂起, 曾致 CI 30min 超时的元凶之一),
       # GOOGLE secrets 配了也不可达; 此测试由 GitHub CI (境外 runner) 覆盖.
-      # --reruns 3 --reruns-delay 20: sg 池上游 (opencode zen) 503 "Endpoint is
-      # unavailable" 实测 2026-09-01 起基础概率 ~25-30% 且成分钟级风暴 — SDK 短退避
-      # (max_retries=2, 退避 <8s) 与旧 --reruns-delay 2 的重试全部打在风暴窗内,
-      # 旧 reruns=2 两轮实测各 3 用例 3 连败判红. 20s delay 让用例级重试跨出风暴窗
-      # (时间隔离), 实测全绿 (4m03s, 11 次 rerun 全数恢复); 上游回稳时 rerun 数
-      # 自然回落, 不需要回调参数. 连续失败仍判红, 不掩盖真回归.
+      # --reruns 3 --reruns-delay 20: 传输噪声/限流不一票否决的时间隔离重试 — 策略
+      # 承袭免费池 503 风暴时代 (当时 SDK 短退避 + reruns-delay 2 的重试全打在分钟级
+      # 风暴窗内, 两轮实测各 3 用例 3 连败判红; 20s delay 让用例级重试跨出风暴窗,
+      # 11 次 rerun 全数恢复).
+      # 智谱出口实测 -n2 全量 0 rerun (2026-09-01), 参数留作安全网 (rerun 主要来源
+      # 为高并发限流与瞬态故障, 数量随负载自然波动, 不需要回调参数).
+      # 连续失败仍判红, 不掩盖真回归.
       # pytest 配置 (testpaths/xdist) 由 pyproject.toml 提供; GitHub CI 同为裸 pytest
       # 调用 (其另有 coverage 参数, 此处不带).
       - name: Test (functional)

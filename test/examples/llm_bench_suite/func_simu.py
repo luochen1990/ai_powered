@@ -28,11 +28,12 @@ _SEED = 42
 # 已知模型能力缺口 (CI 基线模型 nemotron-120b:free, 选型史见 .forgejo/workflows/ci.yml 头注):
 # - func-simu/gen-json-data: 深度遵循缺口 (豁免时曾 3 轮 12/12 实例复现输出空数组 [];
 #   单实例偶发达标由 strict=False 容忍, 判定与归因保留 — 缺口修复即整体转绿)
-# 基线差异: GitHub CI 基线
-# nemotron-120b:free 有此缺口 (豁免保护对象); forgejo CI 基线 2026-09-01 起为 sg 免费池
-# ultra 别名 (nemotron-3-ultra-free), 实测缺口同样存在 (4/4 实例 xfailed, 豁免生效中);
-# 曾短暂使用 x-preview-f-free 时缺口不存在 (4/4 xpass). 两 CI 均绿; 模型升级/池切换后
-# 可评审移除本豁免.
+# 基线差异: GitHub CI 基线 nemotron-120b:free 有此缺口 (豁免保护对象); forgejo CI 基线
+# 2026-09-01 起为 sg default-plan flash (glm-5.3-flash), 实测大概率 xpass (4 轮全量
+# 3 轮 4/4 xpass, 1 轮 4/4 xfail — 边缘能力, xpass 依赖 thinking 开启), 豁免保留作
+# 波动防护 (strict=False 双向绿); 此前 sg 免费池 ultra 别名 (nemotron-3-ultra-free)
+# 缺口同样存在 (4/4 xfailed), 曾短暂使用 x-preview-f-free 时缺口不存在.
+# 模型升级/池切换后可评审移除本豁免.
 _KNOWN_MODEL_GAPS = {"func-simu/gen-json-data"}
 
 
