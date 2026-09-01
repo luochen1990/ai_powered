@@ -13,7 +13,7 @@ class ChatFunctionSimulator(GenericFunctionSimulator):
     ''' implementation of FunctionSimulator for OpenAI compatible models '''
 
     def _extra_system_prompt_maker(self) -> str:
-        return SYSTEM_PROMPT_RETURN_SCHEMA.format(return_schema = json.dumps(self.spec.return_schema),) + SYSTEM_PROMPT_JSON_SYNTAX
+        return SYSTEM_PROMPT_RETURN_SCHEMA.format(return_schema = json.dumps(self._resolved_return_schema()),) + SYSTEM_PROMPT_JSON_SYNTAX
 
     def _response_message_parser(self, response_message: ChatCompletionMessage) -> str:
         tool_calls = response_message.tool_calls

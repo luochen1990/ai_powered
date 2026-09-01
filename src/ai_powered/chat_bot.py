@@ -9,6 +9,7 @@ from openai.types.chat.chat_completion_tool_param import ChatCompletionToolParam
 from ai_powered.colors import gray
 from ai_powered.constants import DEBUG
 from ai_powered.llm.connection import LlmConnection
+from ai_powered.llm.definitions import ModelFeature
 from ai_powered.llm.resolver import resolve_model
 from ai_powered.tool_call import MakeTool
 
@@ -29,7 +30,9 @@ class ChatBot:
 
     def __post_init__(self):
         self._tool_dict = {tool.fn.__name__: tool for tool in self.tools}
-        self._tool_schemas: list[ChatCompletionToolParam] | openai.Omit = [t.schema() for t in self.tools] if len(self.tools) > 0 else openai.omit
+        # 工具参数 schema 的能力门控位 (issue 18): 递归参数类型按通道能力透传或 fail-fast
+        refs_allowed = ModelFeature.schema_refs in model_config.supported_features
+        self._tool_schemas: list[ChatCompletionToolParam] | openai.Omit = [t.schema(refs_allowed = refs_allowed) for t in self.tools] if len(self.tools) > 0 else openai.omit
 
     @sync_compatible
     async def chat_continue(self) -> str:

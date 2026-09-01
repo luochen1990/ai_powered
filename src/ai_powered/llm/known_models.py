@@ -65,12 +65,17 @@ def contains(s: str) -> Callable[[str], bool]:
     return lambda text: s in text
 
 
+#: 开放平台兜底能力集: 全能力减 schema_refs —— $ref/递归透传对下游不可控 (ollama#8444, openrouter 取决下游模型), 默认关闭 (issue 18 P2)
+FALLBACK_FEATURES: set[ModelFeature] = ALL_FEATURES - {ModelFeature.schema_refs}
+
 #: 开放平台的兜底条目 (与 known_model_list 首元素共用同一实例, 避免字面量双写漂移)
-_openrouter_fallback = KnownModel("nvidia/nemotron-3-super-120b-a12b:free", ALL_FEATURES)
-_localhost_fallback = KnownModel("gorilla-llm/gorilla-openfunctions-v2-gguf/gorilla-openfunctions-v2-q4_K_M.gguf", ALL_FEATURES)
+_openrouter_fallback = KnownModel("nvidia/nemotron-3-super-120b-a12b:free", FALLBACK_FEATURES)
+_localhost_fallback = KnownModel("gorilla-llm/gorilla-openfunctions-v2-gguf/gorilla-openfunctions-v2-q4_K_M.gguf", FALLBACK_FEATURES)
 
 KNOWN_PLATFORMS: list[KnownPlatform] = [
     KnownPlatform(
+        #NOTE: 条目用 ALL_FEATURES (而非逐项列举) —— 自动含 schema_refs, 且是 issue 18 唯一经实测支持 $ref/递归透传的平台;
+        # 新增 ModelFeature 成员时此条目会被静默授予新能力, 需人工复核 (P2 教训)
         platform_name = "openai",
         base_url = "https://api.openai.com/v1",
         api_key_env = "OPENAI_API_KEY",

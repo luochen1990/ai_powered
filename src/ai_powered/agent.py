@@ -30,6 +30,7 @@ from ai_powered.llm.connection import LlmConnection
 from ai_powered.llm.definitions import FunctionSpec, ModelFeature
 from ai_powered.llm.known_models import ModelConfig
 from ai_powered.sandbox import COMMAND_GROUPS, ExecutionResult, Sandbox
+from ai_powered.schema_deref import resolve_schema
 from ai_powered.tool_call import return_result_tool_param
 from ai_powered.tools.google_search import google_search
 
@@ -85,6 +86,9 @@ class ReasoningAgent(FunctionAgent):
     @sync_compatible
     async def run(self, arguments_json: str) -> str:
         system_prompt = base_system_prompt(self.spec) + "\nThink step by step as you need, then submit your final result by calling the return_result tool.\n"
+        # return_schema 为 raw 形态, 提交工具的参数 schema 按通道能力门控展开/透传 (issue 18, 与 GenericAgent.run 同款)
+        refs_allowed = ModelFeature.schema_refs in self.model_config.supported_features
+        tools = [return_result_tool_param(resolve_schema(self.spec.return_schema, refs_allowed = refs_allowed))]
 
         conversation: list[ChatCompletionMessageParam] = [
             {"role": "system", "content": system_prompt},
@@ -95,7 +99,7 @@ class ReasoningAgent(FunctionAgent):
             response = await self.connection.chat_completions(
                 model = self.model_config.model_name,
                 messages = conversation,
-                tools = [return_result_tool_param(self.spec.return_schema)],
+                tools = tools,
             )
 
             message = response.choices[0].message
@@ -256,10 +260,14 @@ class GenericAgent(FunctionAgent):
 
     @sync_compatible
     async def run(self, arguments_json: str) -> str:
-        sandbox = self._create_sandbox()
-        tools = _generic_agent_tools(type(self).bash_timeout_limit) + [return_result_tool_param(self.spec.return_schema)]
+        # return_schema 为 raw 形态, 工具参数 schema 按通道能力门控展开/透传 (issue 18);
+        # 工具面是纯计算 (不依赖 sandbox), 必须置于 _create_sandbox 之前 —— resolve_schema 可抛
+        # RecursiveSchemaError, 先于 mkdtemp fail-fast 方能保证 sandbox 创建后的任何路径都在 try/finally 内
+        refs_allowed = ModelFeature.schema_refs in self.model_config.supported_features
+        tools = _generic_agent_tools(type(self).bash_timeout_limit) + [return_result_tool_param(resolve_schema(self.spec.return_schema, refs_allowed = refs_allowed))]
         if os.getenv("GOOGLE_API_KEY"):  # 搜索是便利件而非依赖件: 无 key 静默不注册 (bash 里还有 curl)
-            tools.append(google_search.schema())
+            tools.append(google_search.schema(refs_allowed = refs_allowed))
+        sandbox = self._create_sandbox()
         try:
             system_prompt = base_system_prompt(self.spec) + _GENERIC_AGENT_INSTRUCTION
             conversation: list[ChatCompletionMessageParam] = [

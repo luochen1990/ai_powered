@@ -17,6 +17,7 @@ from openai.types.chat import ChatCompletion, ChatCompletionMessage
 from openai.types.chat.chat_completion import Choice
 from openai.types.chat.chat_completion_message_function_tool_call import ChatCompletionMessageFunctionToolCall, Function
 from openai.types.chat.chat_completion_message_param import ChatCompletionMessageParam
+from openai.types.chat.chat_completion_tool_param import ChatCompletionToolParam
 
 import ai_powered.decorators as decorators
 from ai_powered.llm.connection import LlmConnection
@@ -57,11 +58,13 @@ class ScriptedCompletionConnection:
         self.call_count = 0
         self.seen_messages: list[list[ChatCompletionMessageParam]] = []
         self.seen_tools: list[list[str]] = []  # 每轮请求的 tool 名列表 (工具面断言)
+        self.seen_tool_params: list[list[ChatCompletionToolParam]] = []  # 每轮请求的完整 tool 参数 (schema 门控断言, issue 18)
 
     @sync_compatible
     async def chat_completions(self, **kwargs: Any) -> ChatCompletion:
         self.seen_messages.append(list(kwargs.get("messages", [])))  # 拷贝快照 —— 调用方可能继续 append 同一 list
         self.seen_tools.append([t["function"]["name"] for t in kwargs.get("tools", [])])  #type: ignore[index]
+        self.seen_tool_params.append(list(kwargs.get("tools", [])))  #type: ignore[arg-type]
         step = self.script[min(self.call_count, len(self.script) - 1)]
         self.call_count += 1
         return step

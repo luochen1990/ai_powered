@@ -12,7 +12,7 @@ class ToolsFunctionSimulator(GenericFunctionSimulator):
     ''' implementation of FunctionSimulator for OpenAI compatible models '''
 
     def _param_tools_maker(self) -> Iterable[ChatCompletionToolParam] | openai.Omit:
-        return [return_result_tool_param(self.spec.return_schema)]
+        return [return_result_tool_param(self._resolved_return_schema())]
 
     def _param_tool_choice_maker(self) -> ChatCompletionToolChoiceOptionParam | openai.Omit:
         return {"type": "function", "function": {"name": "return_result"}}

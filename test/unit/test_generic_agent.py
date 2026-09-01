@@ -9,10 +9,13 @@
   - bash timeout: 模型可指定, clamp 到 bash_timeout_limit 硬上限
   - 未知工具 / custom tool call 变体 / max_rounds 耗尽 → AgentRunError
   - 沙盒生命周期: run 内共享, run 结束清理; 构造期 fail-fast (后端缺失 / bwrap 探测)
+  - 递归 return_schema × 无 schema_refs: fail-fast 先于 sandbox 创建 (无宿主目录泄漏)
 '''
 import os
-from typing import Any, cast
+from dataclasses import replace
+from typing import Any, Optional, cast
 
+import msgspec
 import pytest
 from easy_sync import sync_compatible
 
@@ -22,6 +25,13 @@ from ai_powered import GenericAgent
 from ai_powered.agent import AgentRunError
 from ai_powered.llm.connection import LlmConnection
 from ai_powered.sandbox import ExecutionResult, Sandbox
+from ai_powered.schema_deref import RecursiveSchemaError
+
+
+class _LinkedNode(msgspec.Struct):
+    # 递归类型: 链表节点 (顶层定义 —— msgspec 解析字符串前向注解需模块命名空间, 局部类不可见); 不写 docstring 以免变成 description 字段
+    val: int
+    next: Optional['_LinkedNode'] = None
 
 
 class FakeSandbox(Sandbox):
@@ -211,6 +221,30 @@ def test_sandbox_cleaned_even_on_run_error():
     assert sb.cleaned
 
 
+def test_recursive_return_schema_fails_before_sandbox_creation(monkeypatch):
+    ''' 递归 return_schema × 无 schema_refs 能力: RecursiveSchemaError 须在 sandbox 创建**之前**抛出
+    (回归锚: 工具面构造曾夹在 _create_sandbox 与 try/finally 之间, 抛错逃逸 cleanup → 每次调用泄漏一个宿主
+    /tmp/ai_powered_sandbox_* 目录; 修复后纯计算上移, "抛错点先于 mkdtemp" 是比 "cleanup 被调" 更强的性质) '''
+    monkeypatch.delenv("GOOGLE_API_KEY", raising = False)
+
+    sandbox_calls: list[None] = []
+
+    class _NoSandboxAgent(GenericAgent):
+        _backend_ready = staticmethod(lambda: True)
+
+        def _create_sandbox(self) -> Sandbox:
+            sandbox_calls.append(None)  # spy: 本用例断言其绝不被触达
+            raise AssertionError("sandbox created before schema resolution failure")
+
+    recursive_spec = replace(make_spec(), return_schema = msgspec.json.schema(_LinkedNode))
+    conn = ScriptedCompletionConnection([])  # 抛错发生在首个请求前, connection 不被触达
+    agent = _NoSandboxAgent(recursive_spec, FAKE_TOOLS_MODEL, cast(LlmConnection, conn))
+
+    with pytest.raises(RecursiveSchemaError, match = "recursive schema reference"):
+        agent.run('{}').wait()
+    assert sandbox_calls == []
+
+
 def test_google_search_registered_only_with_key(monkeypatch):
     ''' google_search 是便利件: 无 GOOGLE_API_KEY 静默不注册 (工具面收窄, run 不炸) '''
     monkeypatch.delenv("GOOGLE_API_KEY", raising = False)
@@ -246,7 +280,7 @@ def test_google_search_tool_executes_when_registered(monkeypatch):
     class _FakeSearch:
         def __getattr__(self, name):
             return lambda **kw: [{"title": "t", "link": "l", "snippet": "s"}]
-        def schema(self):
+        def schema(self, *, refs_allowed: bool = False):  # 签名对齐 MakeTool.schema (能力门控透传, issue 18)
             from openai.types.chat.chat_completion_tool_param import ChatCompletionToolParam
             return cast(ChatCompletionToolParam, {"type": "function", "function": {"name": "google_search", "parameters": {"type": "object", "properties": {}, "required": []}}})
     monkeypatch.setattr(agent_mod, "google_search", _FakeSearch())

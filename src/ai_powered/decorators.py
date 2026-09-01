@@ -10,7 +10,6 @@ from ai_powered.llm.definitions import FunctionSimulator, FunctionSpec, ModelFea
 from ai_powered.llm.adapter_selector import FunctionSimulatorSelector
 from ai_powered.llm.resolver import resolve_model
 from ai_powered.agent import AgentRunError, FunctionAgent
-from ai_powered.schema_deref import deref
 from ai_powered.constants import DEBUG
 from ai_powered.colors import gray, green, red, yellow
 import inspect
@@ -162,10 +161,11 @@ def ai_powered(
 
         print(f"{sig.return_annotation =}")
 
+    # NOTE: parameters_schema 有意保持 raw (msgspec 原始输出, 不经 deref) —— 它只进 prompt 文本 (base_system_prompt),
+    # 不进结构化请求参数, 与 return_schema (raw 存储 + 消费点能力门控) 是有意的对称性差异 (issue 18 零漂移决策)
     parameters_schema = {param.name: msgspec.json.schema(param.annotation) for param in sig.parameters.values()}
     return_type = sig.return_annotation
-    raw_return_schema = msgspec.json.schema(return_type)
-    return_schema = deref(raw_return_schema)
+    return_schema = msgspec.json.schema(return_type)  # raw schema: 展开或透传由消费点按 schema_refs 能力门控 (issue 18)
     result_type = Result[return_type]
 
     if DEBUG:

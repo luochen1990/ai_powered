@@ -9,7 +9,7 @@ from openai.types.chat.chat_completion_tool_message_param import ChatCompletionT
 from openai.types.chat.chat_completion_message_tool_call import ChatCompletionMessageToolCall
 from ai_powered.colors import gray, green
 from ai_powered.constants import DEBUG
-from ai_powered.schema_deref import deref
+from ai_powered.schema_deref import resolve_schema, shallow_expand, wrap_result_schema
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -18,21 +18,18 @@ R = TypeVar("R")
 def return_result_tool_param(return_schema: dict[str, Any]) -> ChatCompletionToolParam:
     ''' 构造 "return_result" 工具的 OpenAI 参数: 参数 schema 即 {"result": 返回值schema}
 
-    单次模拟 (ToolsFunctionSimulator) 与多轮 agent (ReasoningAgent) 共用同一提交契约 —— 模型以
+    单次模拟 (ToolsFunctionSimulator) 与多轮 agent (ReasoningAgent/GenericAgent) 共用同一提交契约 —— 模型以
     调用该工具的方式提交结构化结果, 参数即最终返回值.
+
+    接收 resolved schema (非递归 deref 展开 / 递归 refs 透传, 由调用侧按能力门控),
+    包装由 wrap_result_schema 统一完成 (含 $defs 根提升, 递归透传时 $defs 必须在文档根).
     '''
     return {
         "type": "function",
         "function":
             {
                 "name": "return_result",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "result": return_schema,
-                    },
-                    "required": ["result"],
-                }
+                "parameters": wrap_result_schema(return_schema),
             },
     }
 
@@ -50,7 +47,9 @@ class MakeTool(msgspec.Struct, Generic[P, R]):
         ArgObj = msgspec.defstruct("ArgObj", properties)
         return ArgObj
 
-    def schema(self) -> ChatCompletionToolParam:
+    def schema(self, *, refs_allowed: bool = False) -> ChatCompletionToolParam:
+        ''' refs_allowed: 模型通道是否声明 schema_refs 能力 (issue 18) ——
+        非递归参数恒 deref 展开 (默认路径与历史零漂移); 递归参数按能力透传 ($defs 在根) 或 fail-fast '''
         function_name = self.fn.__name__
         sig = inspect.signature(self.fn)
         docstring = inspect.getdoc(self.fn)
@@ -59,7 +58,8 @@ class MakeTool(msgspec.Struct, Generic[P, R]):
             print(gray(f"[MakeTool.schema()] {sig =}"))
 
         raw_schema = msgspec.json.schema(self.struct_of_parameters())
-        parameters_schema = deref(raw_schema)
+        # 浅展开: 顶层 $ref 内联一层使根为字面 object (工具参数根必须是 object), 内部 $ref 由根 $defs 解析
+        parameters_schema = shallow_expand(resolve_schema(raw_schema, refs_allowed = refs_allowed))
 
         if DEBUG:
             print(gray(f"[MakeTool.schema()] {parameters_schema =}"))

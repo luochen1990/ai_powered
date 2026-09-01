@@ -7,9 +7,12 @@
   - agent 路径出口校验依然生效 (Result[R] 解码, 无效输出触发 retry / DecodeError)
   - agent 接收 (spec, model_config, connection) —— model 解析结果原样传入 agent 构造器
   - ReasoningAgent 参考实现: 多轮推理循环 / return_result 提交 / max_rounds 耗尽 / 未知工具拒绝
+  - ReasoningAgent 的 return schema 门控: 非递归 deref 展开 / 递归无能力 fail-fast (issue 18)
 
 全程离线: FakeAgent 脚本化; ReasoningAgent 用 conftest 的 ScriptedCompletionConnection 驱动.
 '''
+import json
+from dataclasses import replace
 from typing import Optional, cast
 
 import msgspec
@@ -25,6 +28,7 @@ from ai_powered import FunctionAgent, ReasoningAgent, ai_powered
 from ai_powered.agent import AgentRunError
 from ai_powered.llm.connection import LlmConnection
 from ai_powered.llm.definitions import FunctionSpec
+from ai_powered.schema_deref import RecursiveSchemaError
 from ai_powered.tool_call import return_result_tool_param
 
 
@@ -280,6 +284,43 @@ def test_reasoning_agent_rejects_unexpected_tool():
 
     with pytest.raises(AgentRunError, match = "do_something_else"):
         agent.run('{}').wait()
+
+
+class _ArgObj(msgspec.Struct):
+    # 非递归返回类型样本 (msgspec schema 顶层为 $ref 形态); 顶层定义 —— msgspec 解析字符串注解需模块命名空间
+    python_expression: str
+
+
+class _LinkedNode(msgspec.Struct):
+    # 递归返回类型样本 (链表, $ref 成环); 同上顶层定义
+    val: int
+    next: Optional['_LinkedNode'] = None
+
+
+def test_reasoning_agent_nonrecursive_return_schema_derefd():
+    ''' 非递归 Struct 返回类型 (raw 顶层 $ref): 请求中的 return_result 参数 schema 为 deref 展开形态
+    (spec.return_schema 已是 raw, 门控消费点必须 resolve —— 漏掉则 $ref 形态静默透传, 偏离历史行为) '''
+    conn = ScriptedCompletionConnection([make_tool_call_completion("return_result", '{"result": "x"}')])
+    spec = replace(make_spec(), return_schema = msgspec.json.schema(_ArgObj))
+    agent = ReasoningAgent(spec, FAKE_TOOLS_MODEL, cast(LlmConnection, conn))
+
+    agent.run('{}').wait()
+    (tool_param,) = conn.seen_tool_params[0]
+    assert tool_param["function"]["name"] == "return_result"
+    serialized = json.dumps(tool_param)
+    assert "$ref" not in serialized  # 展开形态: 无 $ref 无 $defs (FAKE_TOOLS_MODEL 无 schema_refs 能力)
+    assert "$defs" not in serialized
+
+
+def test_reasoning_agent_recursive_return_schema_rejected_without_capability():
+    ''' 递归返回类型 × 无 schema_refs 能力: run 期抛 RecursiveSchemaError fail-fast (与 GenericAgent 同款门控) '''
+    conn = ScriptedCompletionConnection([])  # 抛错发生在首个请求前
+    spec = replace(make_spec(), return_schema = msgspec.json.schema(_LinkedNode))
+    agent = ReasoningAgent(spec, FAKE_TOOLS_MODEL, cast(LlmConnection, conn))
+
+    with pytest.raises(RecursiveSchemaError, match = "recursive schema reference"):
+        agent.run('{}').wait()
+    assert conn.call_count == 0
 
 
 def test_return_result_tool_param_shape():

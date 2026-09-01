@@ -13,6 +13,9 @@ class ModelFeature(enum.Enum):
     - tools/function_calling: https://platform.openai.com/docs/guides/function-calling
     - structured_outputs/strict_mode: https://platform.openai.com/docs/guides/structured-outputs
     - seed/reproducible_outputs: https://platform.openai.com/docs/advanced-usage/reproducible-outputs
+
+    schema_refs: 模型通道可接受 schema 中的 $ref/$defs (含递归引用);
+    关闭时 deref 全量展开、遇环 fail-fast 抛 RecursiveSchemaError (issue 18)
     '''
     tools = "function_calling"
     function_calling = "function_calling"
@@ -20,6 +23,7 @@ class ModelFeature(enum.Enum):
     reproducible_outputs = "reproducible_outputs"
     structured_outputs = "structured_outputs"
     strict_mode = "strict_mode"
+    schema_refs = "schema_refs"
 
 
 ALL_FEATURES: set[ModelFeature] = {x for x in ModelFeature}
@@ -37,6 +41,7 @@ class FunctionSpec:
     signature: str
     docstring: Optional[str]
     parameters_schema: dict[str, Any]
+    #: raw schema (msgspec 原始输出, 顶层可为 $ref 形态) —— 能力门控的展开/透传延迟到各消费点 (adapters/agent) 按 schema_refs 能力决策 (issue 18)
     return_schema: dict[str, Any]
 
 

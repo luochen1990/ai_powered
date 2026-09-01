@@ -12,6 +12,7 @@ from ai_powered.colors import green, red, yellow
 from ai_powered.constants import DEBUG, OPENAI_EXTRA_BODY, base_system_prompt
 from ai_powered.llm.connection import LlmConnection
 from ai_powered.llm.definitions import FunctionSimulator, ModelFeature
+from ai_powered.schema_deref import resolve_schema
 from ai_powered.tool_call import ChatCompletionToolParam
 
 
@@ -46,6 +47,14 @@ class GenericFunctionSimulator(FunctionSimulator, ABC):
     def _extra_system_prompt_maker(self) -> str:
         ''' to be overrided '''
         return ""
+
+    def _refs_allowed(self) -> bool:
+        ''' 模型通道是否声明 schema_refs 能力 (递归 schema $ref/$defs 透传的门控位, issue 18) '''
+        return ModelFeature.schema_refs in self.model_features
+
+    def _resolved_return_schema(self) -> dict[str, Any]:
+        ''' 能力门控后的 return schema: 非递归 deref 展开 (零漂移), 递归按能力透传或 fail-fast '''
+        return resolve_schema(self.spec.return_schema, refs_allowed = self._refs_allowed())
 
     def _param_response_format_maker(self) -> ResponseFormat | openai.Omit:
         ''' to be overrided '''
