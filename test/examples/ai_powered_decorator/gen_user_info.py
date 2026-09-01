@@ -33,9 +33,14 @@ def test_gen_self_introduction():
     print(f"{self_introduction =}")
 
 # LLM 往返一致性测试: 输入本身由模型生成 (每轮不同), None 字段的序列化编码存在固有
-# 歧义, 是当前免费档基准模型 (nemotron-120b) 的边缘能力 (实测 temp=0 下仍有 ~10-30%
-# 单次失败率)。允许重跑 3 次: 容忍采样噪声, 连续失败仍判红 (不掩盖真回归)。
-@pytest.mark.flaky(reruns=3, reruns_delay=2)
+# 歧义, 是免费档基准模型的边缘能力 (GitHub CI 基线 nemotron-120b:free temp=0 下
+# 失败率个位数, 未控温时 ~10-30%; forgejo CI 基线 sg 免费池 ultra 档同属边缘,
+# flash 档则系统性不过; 实测数字与选型史见 .forgejo/workflows/ci.yml EXTRA_BODY 注/头注)。
+# reruns=3 与 forgejo CI 全局持平 (比 GitHub CI 全局多一次); delay 20s 对齐 forgejo
+# 风暴隔离策略。marker 优先级高于 CLI, 缺省会回落 0 而非继承 CLI, 故 delay 必须显式;
+# marker 跨 CI 生效, GitHub 侧 delay 同抬至 20s (最坏 +60s, 属可接受代价)。容忍采样
+# 噪声与上游 503 风暴, 连续失败仍判红 (不掩盖真回归)。
+@pytest.mark.flaky(reruns=3, reruns_delay=20)
 def test_extract_identity():
     user_info = gen_user_info()
     self_introduction = gen_self_introduction_for(user_info)

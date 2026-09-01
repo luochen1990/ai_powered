@@ -8,7 +8,7 @@
 # 门禁语义 (bench 测量工具 ≠ CI 门禁的语义错配处理):
 #   - bench suite 的 case 难度本就是为区分模型能力设计的, "模型必过"不是其契约;
 #   - 系统性能力缺口 (每轮稳定复现) 以 xfail 显式豁免, 缺口消失自动转绿, 模型升级后靠评审清理;
-#   - 偶发波动 (实例级 flaky) 沿用 CI 既有 --reruns 2 容忍 (与 examples 同款语义)
+#   - 偶发波动 (实例级 flaky) 沿用 CI 既有 --reruns 容忍 (与 examples 同款语义)
 
 import random
 from pathlib import Path
@@ -28,9 +28,11 @@ _SEED = 42
 # 已知模型能力缺口 (CI 基线模型 nemotron-120b:free, 选型史见 .forgejo/workflows/ci.yml 头注):
 # - func-simu/gen-json-data: 深度遵循缺口 (豁免时曾 3 轮 12/12 实例复现输出空数组 [];
 #   单实例偶发达标由 strict=False 容忍, 判定与归因保留 — 缺口修复即整体转绿)
-# 基线差异 (2026-08-26 forgejo CI 切 sg 免费池后): GitHub CI 基线 nemotron-120b:free
-# 有此缺口 (豁免保护对象); forgejo CI 基线 x-preview-f-free 实测 4/4 实例通过 (xpass
-# 不炸, strict=False)。两 CI 均绿; 模型升级/池切换后可评审移除本豁免.
+# 基线差异: GitHub CI 基线
+# nemotron-120b:free 有此缺口 (豁免保护对象); forgejo CI 基线 2026-09-01 起为 sg 免费池
+# ultra 别名 (nemotron-3-ultra-free), 实测缺口同样存在 (4/4 实例 xfailed, 豁免生效中);
+# 曾短暂使用 x-preview-f-free 时缺口不存在 (4/4 xpass). 两 CI 均绿; 模型升级/池切换后
+# 可评审移除本豁免.
 _KNOWN_MODEL_GAPS = {"func-simu/gen-json-data"}
 
 

@@ -16,24 +16,31 @@
 # 无限额账户约束). VM→宿主可达性: 实测现有配置即通 (CI 端到端验证过; 曾疑 firewall
 # 阻挡, 系 curl -m 3 把 zen 慢响应超时误读为连接拒绝); nixos#601 的
 # br-microvm:18787 显式放行已合并 (防御性声明, 使可达性不依赖隐式通路).
-# 模型 x-preview-f-free (Ox Alpha Free Unlimited): sg free 池钦点兜底模型 (default-plan
-# 同款); 实测 zen 免费池对请求 model 有 soft-fallback (任意 model 名实际多被服务为
-# x-preview-f-free, 响应 model 字段才是真实模型), 故直接请求实际服务模型名.
+# 模型 ultra (sg free router 稳定别名, 当前服务 nemotron-3-ultra-free): 免费池换将
+# 由 nixos 仓 free-providers.nix 别名层吸收, 上游下架只改那边 aliases 表, 本文件零
+# 改动 (2026-09-01 x-preview-f-free 上游下架 401 "Model not supported" 教训: 不再
+# 硬编码具体模型 id). 代价: 无端变红时本仓无 diff 可归因 — 先查那边 aliases 表近期变更;
+# DEBUG 日志里响应 model 字段即实际服务模型 (别名只是请求侧稳定名).
 # FEATURES pin=tools (仅此一项!): 实测 zen 池忽略 response_format json_schema (返回
 # markdown 文本无约束解码) → structured_outputs 不可用, 必须走 tools 适配器路径
 # (tools 调用实测正常). base_url "10.168.0.1:18787/o/free" 不含已知平台子串, 本就
 # 落入未知平台默认 {tools}, pin 显式同值防默认漂移.
 # EXTRA_BODY 只留 temperature 0 (复现性): OpenRouter 的 reasoning 开关参数在 zen 无
-# 对应物 (Ox Alpha 自带 reasoning_content 输出, 不可关, tools 路径解析不受其扰).
-# 选型史 (scripts/model_baseline.py 门禁 + 全量 pytest, 2026-08):
+# 对应物 (实测过的 zen 免费池成员均自带 reasoning 输出不可关, tools 路径解析不受其扰).
+# 选型史 (scripts/model_baseline.py 门禁 + 全量 pytest, 2026-08~09):
 #   - OpenRouter 免费层 nvidia/nemotron-3-super-120b-a12b:free (120B MoE, tools+结构化
 #     输出双支持): 能力/复现性实测帕累托最优, 但 1000/day (充 $10 档) 是账户级全
 #     :free 模型共享额度 (非 per-model, 换模型不能绕), 2026-08-26 被 9 次全量 CI 烧穿
 #     (429 风暴), 密集迭代日结构性复发 → 弃, 仅 GitHub CI (境外 runner) 继续使用.
-#   - sg 免费池 (x-preview-f-free): 实测 ai_powered_decorator + llm_bench_suite e2e
-#     37 passed + 4 xpassed (58s, gen-json-data 深度遵循缺口不存在) + reasoning_agent
-#     + calculator 工具循环全绿; 上游偶发 503 (zen Console 端点瞬时不可用) 由
-#     --reruns 2 吸收; 延迟低于 openrouter 出境链路.
+#   - sg 免费池 (ultra): 实测 examples e2e (Test 步全量) 41 passed + 4 xfailed
+#     全绿 (4m03s, reruns 策略见 Test 步注); 上游 503 风暴由 reruns 时间隔离吸收;
+#     延迟低于 openrouter 出境链路.
+#   - sg 免费池 flash 档 (nemotron-3.5-lightning-free, 2026-09-01 实测弃):
+#     test_extract_identity (LLM 往返一致性) 三轮两败 (flaky reruns=3 下各 4 次
+#     尝试连败), 属该档系统性能力边界; ultra 档同测试稳定通过.
+#   - x-preview-f-free (2026-08-26 选定, 2026-09-01 上游下架): 曾实测 37 passed
+#     + 4 xpassed (58s); 下架后请求 401 "Model not supported", CI 全红 — 具体模型
+#     id 硬编码的结构性风险由此暴露, 已改用别名.
 #   - 本地小模型 (granite4.1:8b / ornith:9b / gemma4:12b) 均 14/15 倒在 "模型扮演
 #     函数模拟器" 元任务 (指令遵循/一致性短板), 属 8-12B 档结构性能力边界.
 #   - qwen3.6:27b (本地 ollama) 能力达标但 27B+thinking 桌面共存 GPU 仅 ~13 tok/s
@@ -64,8 +71,10 @@ jobs:
   check:
     runs-on: vm-nix
     # timeout 是硬上限 (超时算 job failure 阻塞合并), 取宽松预算: 热路径 (venv 复用)
-    # 实测 ~1.5min; 冷路径 (建 venv + 全量装依赖) + sg 池上游偶发 503 + reruns 重试
-    # 的最坏叠加留足余量. (qwen3.6:27b 时代 30min 真超时过, 见文件头选型史.)
+    # 实测 ~6min (ultra 档 + 503 rerun 开销); 冷路径 (建 venv + 全量装依赖) 再叠加
+    # 的最坏情况留足余量. 注意 503 风暴若持续 >10min, rerun delay 会拖长 job 至撞
+    # 此硬上限 (判红但多占 capacity=1 串行 runner 30min, 属该故障模式的已知代价).
+    # (qwen3.6:27b 时代 30min 真超时过, 见文件头选型史.)
     timeout-minutes: 30
     env:
       VIRTUAL_ENV: /var/lib/forgejo-runner/cache/ai-powered-venv
@@ -75,7 +84,7 @@ jobs:
       # 见文件头 (structured_outputs 实测不可用, tools 适配器路径).
       OPENAI_API_KEY: public
       OPENAI_BASE_URL: http://10.168.0.1:18787/o/free
-      OPENAI_MODEL_NAME: x-preview-f-free
+      OPENAI_MODEL_NAME: ultra
       OPENAI_MODEL_FEATURES: tools
       # temperature 0 对齐 baseline 脚本复现性方法论, 显著降低输出随机性 (实测
       # test_extract_identity 失败率 ~17% -> 个位数).
@@ -146,14 +155,16 @@ jobs:
       # deselect use_google_search: 该测试经 google_search 工具直连 googleapis.com,
       # runner VM 网络不出境 (实测 SYN-SENT 无限挂起, 曾致 CI 30min 超时的元凶之一),
       # GOOGLE secrets 配了也不可达; 此测试由 GitHub CI (境外 runner) 覆盖.
-      # --reruns 2: sg 池上游 (opencode zen) 偶发 503 "Endpoint is unavailable"
-      # (后端瞬时不可用, 实测约 1/10 概率; openai client 内置
-      # 重试不覆盖, connection.py 的 LlmConnection 防御转为清晰 RuntimeError), 传输噪声不应一票
-      # 否决; 连续失败仍判红, 不掩盖真回归.
+      # --reruns 3 --reruns-delay 20: sg 池上游 (opencode zen) 503 "Endpoint is
+      # unavailable" 实测 2026-09-01 起基础概率 ~25-30% 且成分钟级风暴 — SDK 短退避
+      # (max_retries=2, 退避 <8s) 与旧 --reruns-delay 2 的重试全部打在风暴窗内,
+      # 旧 reruns=2 两轮实测各 3 用例 3 连败判红. 20s delay 让用例级重试跨出风暴窗
+      # (时间隔离), 实测全绿 (4m03s, 11 次 rerun 全数恢复); 上游回稳时 rerun 数
+      # 自然回落, 不需要回调参数. 连续失败仍判红, 不掩盖真回归.
       # pytest 配置 (testpaths/xdist) 由 pyproject.toml 提供; GitHub CI 同为裸 pytest
       # 调用 (其另有 coverage 参数, 此处不带).
       - name: Test (functional)
         run: |
           set -eu
           export PATH="$VIRTUAL_ENV/bin:$PATH"
-          pytest --reruns 2 --reruns-delay 2 --deselect test/examples/chat_bot/use_google_search.py
+          pytest --reruns 3 --reruns-delay 20 --deselect test/examples/chat_bot/use_google_search.py
