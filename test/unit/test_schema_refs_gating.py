@@ -187,15 +187,18 @@ def test_fallback_features_exclude_schema_refs():
 
 
 def test_known_models_schema_refs_distribution():
-    ''' C 修正回归: 仅 openai 条目含 schema_refs; fallback 与 deepseek/moonshot/qwen 条目不含 '''
+    ''' C 修正回归: 仅 openai 条目含 schema_refs, 其余平台 (含未来新增) 一律不含 —— 全平台遍历,
+    新增平台自动纳入守护, 免手维护名单结构性过期 (zhipu 条目即漏网后补的实证) '''
     platforms = {p.platform_name: p for p in KNOWN_PLATFORMS}
 
     for model in platforms["openai"].known_model_list:
         assert ModelFeature.schema_refs in model.supported_features, model.model_name
 
-    for platform_name in ("deepseek", "moonshot", "qwen", "openrouter", "localhost"):
-        for model in platforms[platform_name].known_model_list:
-            assert ModelFeature.schema_refs not in model.supported_features, f"{platform_name}/{model.model_name}"
+    for platform in KNOWN_PLATFORMS:
+        if platform.platform_name == "openai":
+            continue
+        for model in platform.known_model_list:
+            assert ModelFeature.schema_refs not in model.supported_features, f"{platform.platform_name}/{model.model_name}"
 
 
 def test_selector_end_to_end_recursive_passthrough():

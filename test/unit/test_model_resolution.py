@@ -44,6 +44,29 @@ def test_prefixed_builtin_provider_resolution():
     assert r.model_config.supported_features == {ModelFeature.tools}
 
 
+def test_prefixed_zhipu_resolution():
+    ''' zhipu 平台 (issue 18 阶段 2 实测回填): 端点忽略 json_schema + glm $ref 值双重编码
+    → 仅授予 tools, structured_outputs/schema_refs 均不授予 '''
+    r = resolve_model("zhipu/glm-5.3")
+    assert str(r.connection.base_url) == "https://open.bigmodel.cn/api/paas/v4"
+    assert r.model_config.supported_features == {ModelFeature.tools}
+
+
+def test_prefixed_zhipu_variant_matches_by_prefix():
+    ''' 前缀匹配契约: 未列名变体 (如 glm-5.3-air) 以 startswith 命中 glm-5.3 条目, 名字原样透传 '''
+    r = resolve_model("zhipu/glm-5.3-air")
+    assert r.model_config.model_name == "glm-5.3-air"
+    assert r.model_config.supported_features == {ModelFeature.tools}
+
+
+def test_env_zhipu_url_matches_platform(monkeypatch):
+    ''' env 路径: base_url 含 bigmodel (含 coding 端点) → zhipu 平台; model=None 无名走 list[0] 默认 (旗舰 glm-5.3) '''
+    monkeypatch.setattr(resolver, "OPENAI_BASE_URL", "https://open.bigmodel.cn/api/coding/paas/v4")
+    r = resolve_model(None)
+    assert r.model_config.model_name == "glm-5.3"
+    assert r.model_config.supported_features == {ModelFeature.tools}
+
+
 def test_prefixed_org_slash_model_name_passthrough():
     ''' openrouter 的模型名本身含 "/" (org/model 形态): partition 只切第一段, 剩余原样透传 (主用例) '''
     r = resolve_model("openrouter/nvidia/nemotron-3-super-120b-a12b:free")

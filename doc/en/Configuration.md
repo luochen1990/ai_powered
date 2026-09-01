@@ -52,7 +52,7 @@ def translate(text: str) -> str:
 
 Resolution rules:
 
-- A prefixed name resolves against the model registry (built-in providers: `openai`, `deepseek`, `moonshot`, `qwen`, `openrouter`, `localhost`; see [known_models.py](/src/ai_powered/llm/known_models.py)). The registry entry provides `base_url` and the API key environment variable, so no env switching is needed.
+- A prefixed name resolves against the model registry (built-in providers: `openai`, `deepseek`, `moonshot`, `qwen`, `zhipu`, `openrouter`, `localhost`; see [known_models.py](/src/ai_powered/llm/known_models.py)). The registry entry provides `base_url` and the API key environment variable, so no env switching is needed.
 - API key lookup: the provider's dedicated env (e.g. `DEEPSEEK_API_KEY`) first, falling back to the generic `OPENAI_API_KEY`.
 - A bare name or `None` keeps the env-based path unchanged (priority: `model` param > env vars > platform default).
 - Unknown provider (or unknown model on a closed platform like `deepseek`) fails fast at decoration time with a `ValueError`. Open platforms (`openrouter`, `localhost`) accept any model name, falling back to a known default config.

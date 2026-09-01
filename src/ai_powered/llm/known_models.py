@@ -116,6 +116,22 @@ KNOWN_PLATFORMS: list[KnownPlatform] = [
         ]
     ),
     KnownPlatform(
+        #NOTE: 全条目 {tools} (issue 18 阶段 2 实测回填, 归档 5/补遗): 智谱端点不实现 response_format
+        # json_schema (HTTP 200 静默忽略, 官方结构化输出方案 = json_object + schema 入 system 消息),
+        # 故不授予 structured_outputs; glm-5.3 tools 通道对 $ref 属性值确定性双重编码, 故不授予
+        # schema_refs。match 含 "bigmodel" → 标准 (paas) 与 coding (coding/paas) 端点同匹配;
+        # 模型名按前缀匹配 (registry first-match, glm-5.3 前缀承载未列名变体), env 路径无名走
+        # list[0] 默认 (旗舰, 同为 {tools})
+        platform_name = "zhipu",
+        base_url = "https://open.bigmodel.cn/api/paas/v4",
+        api_key_env = "ZHIPUAI_API_KEY",
+        match_platform_url = contains("bigmodel"),
+        known_model_list = [
+            KnownModel("glm-5.3", {ModelFeature.tools}),
+            KnownModel("glm-5.3-flash", {ModelFeature.tools}),
+        ]
+    ),
+    KnownPlatform(
         platform_name = "openrouter",
         base_url = "https://openrouter.ai/api/v1",
         api_key_env = "OPENROUTER_API_KEY",
