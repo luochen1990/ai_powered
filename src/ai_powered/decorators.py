@@ -180,7 +180,12 @@ def ai_powered(
     model_features: set[ModelFeature] = model_config.supported_features
     model_options: dict[str, Any] = model_config.suggested_options
 
-    spec = FunctionSpec(function_name, full_signature, docstring, parameters_schema, return_schema)
+    spec = FunctionSpec(
+        function_name, full_signature, docstring, parameters_schema, return_schema,
+        parameter_annotations = {param.name: param.annotation for param in sig.parameters.values()},
+        parameter_defaults = {param.name: param.default for param in sig.parameters.values() if param.default is not inspect.Parameter.empty},
+        return_annotation = return_type,
+    )
 
     if agent is not None:
         missing_features = agent.required_features - model_features

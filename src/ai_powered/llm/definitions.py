@@ -43,6 +43,14 @@ class FunctionSpec:
     parameters_schema: dict[str, Any]
     #: raw schema (msgspec 原始输出, 顶层可为 $ref 形态) —— 能力门控的展开/透传延迟到各消费点 (adapters/agent) 按 schema_refs 能力决策 (issue 18)
     return_schema: dict[str, Any]
+    #: 原始类型注解 (param.name -> annotation), 供需要类型层信息的引擎消费 (如远程通道的 TypeDesc 编译);
+    #: None = 构造方未提供 (旧路径兼容), JSON schema 仍是所有引擎的公共底座
+    parameter_annotations: Optional[dict[str, Any]] = None
+    #: 带 default 的参数 (param.name -> default value, 只含显式带缺省者) —— 调用方省略时 sig.bind
+    #: 不含该参数, 远程通道据此对 input_spec 的该字段包 maybe (服务端输入校验允许省略)
+    parameter_defaults: Optional[dict[str, Any]] = None
+    #: 返回值原始注解, 语义同上; None = 未提供 (注意: "注解为 NoneType" 的函数不在本库语义内, 不与缺省歧义)
+    return_annotation: Any = None
 
 
 @dataclass

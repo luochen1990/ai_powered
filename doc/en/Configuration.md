@@ -82,3 +82,11 @@ export OPENAI_EXTRA_BODY='{"reasoning": {"enabled": false}, "temperature": 0}'
 ```
 
 this tells `ai-powered` to merge these fields into the top level of every request body (via the openai SDK's `extra_body`), useful for provider-specific parameters like OpenRouter's `reasoning` switch. Unset means no extra body is sent.
+
+### point the remote execution engine at an agent-service deployment:
+
+```shell
+export AI_POWERED_AGENT_SERVICE_URL=https://your-agent-service-host
+```
+
+this tells `ai_powered.remote.RemoteAgent` where to register and invoke server-side dynamic agents (the client needs no API key — credentials are managed server-side). Resolution priority: the `service_url` class attribute on your `RemoteAgent` subclass > this environment variable. See [Remote Execution](/README.md#remote-execution-agent-service).
