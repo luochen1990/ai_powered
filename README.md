@@ -152,7 +152,24 @@ Registration happens lazily on the first call (and self-heals after a service re
 export AI_POWERED_AGENT_SERVICE_URL=https://your-agent-service-host
 ```
 
-For deployment-specific defaults, subclass `RemoteAgent` and override the `service_url` / `default_model` / `invoke_timeout` class attributes.
+For deployment-specific defaults — endpoint, model, task timeout, and server-side MCP tool references — subclass `RemoteAgent` and override the class attributes (the `agent=` parameter accepts any `FunctionAgent` subclass, mirroring how the local `GenericAgent` is customized):
+
+```python
+class MyResearchAgent(RemoteAgent):
+    service_url = "https://agents.internal:8300"
+    default_model = "glm-5.3"
+    invoke_timeout = 300.0
+    tools = ["web-search", "akshare"]  # host-side MCP tools; names must be whitelisted
+                                        # server-side (AGENT_SERVICE_TOOL_CATALOG) — an
+                                        # unknown name surfaces as RemoteContractError on
+                                        # first-call registration. Default [] = sandbox
+                                        # built-ins only (Bash/Read/Write/Edit/Grep/Glob).
+
+@ai_powered(agent = MyResearchAgent)
+def research(topic: str) -> Report:
+    ''' Research a topic with web access. '''
+    ...
+```
 
 Known limitations of the remote channel (relative to the local engines): `dict[str, T]` (the wire ADT has no map primitive), bare `Union[A, B]` (the server-side sum is a tagged form), tuples, and recursive types are not supported — all rejected at decoration time with clear errors (fail-fast, see `ai_powered/remote/type_desc.py` for the full rejection list).
 

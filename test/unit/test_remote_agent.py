@@ -358,3 +358,36 @@ def test_default_param_with_default_fields_combination(service_env: None) -> Non
             },
         },
     }
+
+
+def test_tools_class_attribute_passed_through(service_env: None) -> None:
+    ''' tools 定制面: 继承子类的 ClassVar.tools 透传进注册体 (宿主侧 MCP 白名单引用);
+    默认 RemoteAgent 不带 tools 键 (= 服务端仅沙箱六件套) '''
+    fake = FakeAgentService(invoke_script = [FakeAgentService._invoke_ok({"result": "report"})])
+
+    class ToolAgent(RemoteAgent):
+        tools: ClassVar[list[str]] = ["web-search", "akshare"]
+        def _create_client(self, url: str) -> AgentServiceClient:
+            return AgentServiceClient(url, transport = fake.transport)
+
+    @ai_powered(model = "fake-model", agent = ToolAgent)
+    def research(topic: str) -> str:
+        ''' Research a topic. '''
+        ...
+
+    assert research("kw") == "report"
+    assert fake.registered_defn["tools"] == ["web-search", "akshare"]
+
+
+def test_default_agent_has_no_tools_key(service_env: None) -> None:
+    ''' 默认路径: 注册体不含 tools 键 (空列表省略 —— 服务端 canonical 剥默认值, 发空与不发同 id) '''
+    fake = FakeAgentService()
+    agent_cls = make_agent_cls(fake.transport)
+
+    @ai_powered(model = "fake-model", agent = agent_cls)
+    def plain(x: int) -> int:
+        ''' Plain. '''
+        ...
+
+    assert plain(1) == 42
+    assert "tools" not in fake.registered_defn

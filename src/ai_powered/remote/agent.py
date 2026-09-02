@@ -52,13 +52,20 @@ _SANDBOX_INSTRUCTION = (
 class RemoteAgent(FunctionAgent):
     ''' 远程沙箱执行引擎: 函数签名 -> 服务端动态 agent, 能力对等本地 GenericAgent 的服务端版
 
-    两种用法:
+    两种用法 (与本地 GenericAgent 的双用法协议对偶 —— agent 参数接受子类, 装饰期构造一次实例):
     - 直接使用 (@ai_powered(model = "模型名", agent = RemoteAgent)): 端点读环境变量
       AI_POWERED_AGENT_SERVICE_URL (服务端管控凭证, 客户端零 key); 未指定 model 参数时
       注册模型名回落装饰器的解析结果 (平台默认兜底, 见 resolver.py)
-    - 继承覆盖 ClassVar: 固定端点 (service_url) / 固定注册模型 (default_model, 优先于
-      装饰器解析) / 放宽任务级超时 (invoke_timeout, 默认 120s —— 服务端沙箱任务典型
-      耗时 20-35s 量级)
+    - 继承覆盖 ClassVar 定制 (推荐形态):
+        class MyAgent(RemoteAgent):
+            service_url = "https://agents.internal:8300"   # 固定端点
+            default_model = "glm-5.3"                      # 固定注册模型 (优先于装饰器解析)
+            invoke_timeout = 300.0                         # 任务级超时 (默认 120s —— 服务端沙箱任务典型 20-35s 量级)
+            tools = ["web-search", "akshare"]              # 宿主侧 MCP 工具白名单引用
+      tools 引用名须在服务端 AGENT_SERVICE_TOOL_CATALOG 目录内 (白名单服务端管控, 注册方只引用名);
+      未知名在首次调用的注册期报 RemoteContractError (不可 retry) —— 客户端无法本地校验白名单,
+      属已知的 fail-fast 边界. 默认 [] = 仅服务端沙箱六件套 (Bash/Read/Write/Edit/Grep/Glob).
+      更深度的定制可覆盖 _build_definition 整体接管 defn 组装 (开放出口, 对齐 _create_client 的 seam 惯例).
 
     装饰期 fail-fast (零网络): 类型不被远程通道支持 (dict/裸 Union/递归等, 见
     type_desc.py 拒绝清单) / 端点缺失, 均抛 ValueError 族.
@@ -67,6 +74,7 @@ class RemoteAgent(FunctionAgent):
     service_url: ClassVar[str | None] = None
     default_model: ClassVar[str | None] = None
     invoke_timeout: ClassVar[float] = DEFAULT_INVOKE_TIMEOUT
+    tools: ClassVar[list[str]] = []
     required_features: ClassVar[set[ModelFeature]] = set()
 
     _defn: dict[str, Any]
@@ -109,7 +117,7 @@ class RemoteAgent(FunctionAgent):
                 raise ValueError(f"{type(self).__name__}: 形参名 {name!r} {RESERVED_NAME_REASON}")
             desc = compile_type(ann, defaults_omissible = True)
             input_fields[name] = field_type(desc, omissible = name in defaults)
-        return {
+        defn: dict[str, Any] = {
             "name": spec.function_name,
             # NOTE (review ②权衡记录): system_prompt 内嵌的 return_schema (msgspec 输出) 对缺省字段不列
             # required, 与 output_spec 的必选编译 (H-1 决策) 语义相消 —— LLM 可能倾向省略缺省字段, 由服务端
@@ -119,6 +127,9 @@ class RemoteAgent(FunctionAgent):
             "input_spec": {"kind": "product", "fields": input_fields},
             "output_spec": {"kind": "product", "fields": {"result": {"type": compile_type(spec.return_annotation)}}},
         }
+        if type(self).tools:  # 空列表省略 —— 服务端 canonical 化剥默认值, 发空与不发同 id, 不发更净
+            defn["tools"] = list(type(self).tools)
+        return defn
 
     @sync_compatible
     async def run(self, arguments_json: str) -> str:
