@@ -17,6 +17,7 @@ from openai.types.chat import ChatCompletion, ChatCompletionMessage
 from openai.types.chat.chat_completion import Choice
 from openai.types.chat.chat_completion_message_function_tool_call import ChatCompletionMessageFunctionToolCall, Function
 from openai.types.chat.chat_completion_message_param import ChatCompletionMessageParam
+from openai.types.chat.chat_completion_message_tool_call import ChatCompletionMessageToolCallUnion
 from openai.types.chat.chat_completion_tool_param import ChatCompletionToolParam
 
 import ai_powered.decorators as decorators
@@ -30,8 +31,8 @@ FAKE_TOOLS_MODEL = KnownModel("fake-model", {ModelFeature.tools})
 
 
 def make_spec() -> FunctionSpec:
-    ''' agent 测试通用的最小 FunctionSpec '''
-    return FunctionSpec("fn", "def fn(x: int) -> int", "doc", {"x": {"type": "integer"}}, {"type": "integer"})
+    ''' agent 测试通用的最小 FunctionSpec (return_annotation 与 return_schema 一致 —— issue #28 环内校验依赖注解) '''
+    return FunctionSpec("fn", "def fn(x: int) -> int", "doc", {"x": {"type": "integer"}}, {"type": "integer"}, return_annotation = int)
 
 
 def make_content_completion(content: Optional[str]) -> ChatCompletion:
@@ -50,6 +51,17 @@ def make_tool_call_completion(tool_name: str, arguments_json: str) -> ChatComple
     )
 
 
+def make_tool_calls_completion(calls: list[tuple[str, str, str]]) -> ChatCompletion:
+    ''' 模拟模型并行调用多个工具: calls = [(tool_call_id, tool_name, arguments_json), ...] (issue #28 并行批用例) '''
+    tool_calls: list[ChatCompletionMessageToolCallUnion] = [
+        ChatCompletionMessageFunctionToolCall(id = tc_id, function = Function(name = name, arguments = args), type = "function") for tc_id, name, args in calls
+    ]
+    return ChatCompletion(
+        id = "fake-completion", created = 0, model = "fake-model", object = "chat.completion",
+        choices = [Choice(finish_reason = "tool_calls", index = 0, message = ChatCompletionMessage(role = "assistant", content = None, tool_calls = tool_calls))],
+    )
+
+
 class ScriptedCompletionConnection:
     ''' 脚本化连接: 依次返回预构造 ChatCompletion, 耗尽重复末元素; spy 记录每轮请求的 messages '''
 
@@ -59,12 +71,14 @@ class ScriptedCompletionConnection:
         self.seen_messages: list[list[ChatCompletionMessageParam]] = []
         self.seen_tools: list[list[str]] = []  # 每轮请求的 tool 名列表 (工具面断言)
         self.seen_tool_params: list[list[ChatCompletionToolParam]] = []  # 每轮请求的完整 tool 参数 (schema 门控断言, issue 18)
+        self.seen_tool_choice: list[Any] = []  # 每轮请求的 tool_choice (r=1 强制终点断言, issue 28)
 
     @sync_compatible
     async def chat_completions(self, **kwargs: Any) -> ChatCompletion:
         self.seen_messages.append(list(kwargs.get("messages", [])))  # 拷贝快照 —— 调用方可能继续 append 同一 list
         self.seen_tools.append([t["function"]["name"] for t in kwargs.get("tools", [])])  #type: ignore[index]
         self.seen_tool_params.append(list(kwargs.get("tools", [])))  #type: ignore[arg-type]
+        self.seen_tool_choice.append(kwargs.get("tool_choice"))
         step = self.script[min(self.call_count, len(self.script) - 1)]
         self.call_count += 1
         return step

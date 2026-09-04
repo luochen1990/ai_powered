@@ -1,5 +1,5 @@
 from functools import partial, wraps
-from typing import Any, Awaitable, Callable, Generic, overload
+from typing import Any, Awaitable, Callable, overload
 from easy_sync import sync_compatible
 from typing_extensions import ParamSpec, TypeVar
 import msgspec
@@ -12,19 +12,14 @@ from ai_powered.llm.resolver import resolve_model
 from ai_powered.agent import AgentRunError, FunctionAgent
 from ai_powered.constants import DEBUG
 from ai_powered.colors import gray, green, red, yellow
+from ai_powered.tool_call import Result
 import inspect
-
-A = TypeVar("A")
 
 #: retry 环需要捕获的瞬时失败: API/网络层错误, LLM 网关 200+body.error 透传的上游瞬时故障 (LlmGatewayError),
 #: agent run 的采样噪声类故障 (AgentRunError: 多轮预算耗尽/调用未知工具), 响应解析与结构校验错误,
 #: 以及适配器中"响应不含期望结构"的断言
 #: NOTE: 依赖适配器中的 assert 语句, python -O 模式下 assert 被剥离, 该类故障将退化为不可重试异常 (见 doc/en/DecoratorParams.md D2)
 RETRYABLE_EXCEPTIONS: tuple[type[Exception], ...] = (openai.APIError, LlmGatewayError, AgentRunError, msgspec.DecodeError, AssertionError)
-
-
-class Result(msgspec.Struct, Generic[A]):
-    result: A
 
 
 P = ParamSpec("P")

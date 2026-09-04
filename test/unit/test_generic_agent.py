@@ -24,6 +24,7 @@ from conftest import FAKE_TOOLS_MODEL, ScriptedCompletionConnection, make_conten
 from ai_powered import GenericAgent
 from ai_powered.agent import AgentRunError
 from ai_powered.llm.connection import LlmConnection
+from ai_powered.llm.definitions import FunctionSpec
 from ai_powered.sandbox import ExecutionResult, Sandbox
 from ai_powered.schema_deref import RecursiveSchemaError
 
@@ -58,8 +59,9 @@ class FakeSandbox(Sandbox):
         super().cleanup()
 
 
-def _agent_with(sandbox: FakeSandbox, script, **classvars: Any) -> tuple[GenericAgent, ScriptedCompletionConnection]:
-    ''' 构造注入 FakeSandbox 的 GenericAgent 子类实例 (先换档后构造: 构造期 fail-fast 被注入点绕开) '''
+def _agent_with(sandbox: FakeSandbox, script, spec: Optional[FunctionSpec] = None, **classvars: Any) -> tuple[GenericAgent, ScriptedCompletionConnection]:
+    ''' 构造注入 FakeSandbox 的 GenericAgent 子类实例 (先换档后构造: 构造期 fail-fast 被注入点绕开;
+    spec 可选覆盖 —— 默认 conftest.make_spec, issue #28 降级用例传无注解 spec) '''
     conn = ScriptedCompletionConnection(script)
 
     class _ScriptedAgent(GenericAgent):
@@ -68,7 +70,7 @@ def _agent_with(sandbox: FakeSandbox, script, **classvars: Any) -> tuple[Generic
     for key, value in classvars.items():
         setattr(_ScriptedAgent, key, value)
 
-    return _ScriptedAgent(make_spec(), FAKE_TOOLS_MODEL, cast(LlmConnection, conn)), conn
+    return _ScriptedAgent(spec or make_spec(), FAKE_TOOLS_MODEL, cast(LlmConnection, conn)), conn
 
 
 def test_happy_path_bash_then_submit():
@@ -106,10 +108,10 @@ def test_timeout_fed_back():
     sb = FakeSandbox([ExecutionResult("", "", -9, True)])
     agent, conn = _agent_with(sb, [
         make_tool_call_completion("bash", '{"command": "sleep 999", "timeout": 5}'),
-        make_tool_call_completion("return_result", '{"result": "gave up"}'),
+        make_tool_call_completion("return_result", '{"result": 0}'),  # 合法提交 (issue #28 环内校验: 非法提交不再直通出口)
     ])
 
-    assert agent.run('{}').wait() == '{"result": "gave up"}'
+    assert agent.run('{}').wait() == '{"result": 0}'
     assert "timed_out" in str(conn.seen_messages[1][-1].get("content"))
 
 

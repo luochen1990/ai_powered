@@ -126,6 +126,8 @@ def solve_word_problem(problem: str) -> int:
 
 Agents are constructed once per decorated function and receive `(spec, model_config, connection)`; the return-type validation (and `retry`) still applies to their output. See the `FunctionAgent` docstring for the subclass contract.
 
+Built-in agents also ship a submission-reliability mechanism (issue #28): stalled loops (consecutive text-only rounds) get a submit nudge, the round budget gets exponentially shrinking countdown reminders, the last round force-selects `return_result`, and submissions are schema-validated in-loop with per-field error feedback — so a nearly-finished task no longer burns its whole round budget (and a retry) just because the model forgot to submit.
+
 `retry = N` means up to N extra attempts when a transient failure occurs (network/API errors, malformed or schema-invalid responses, or responses missing the expected structure). The default `retry = 0` keeps the old fail-fast behavior. Note that retries at this level are independent of (and may stack with) the OpenAI SDK's own `max_retries` for network errors. When a retryable failure persists, the last exception is re-raised as-is.
 
 Design decisions for decorator parameters are recorded [here](/doc/en/DecoratorParams.md).

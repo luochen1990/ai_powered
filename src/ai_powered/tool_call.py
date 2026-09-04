@@ -15,6 +15,15 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 
+class Result(msgspec.Struct, Generic[R]):
+    ''' 提交契约的解码侧: return_result 工具参数的 JSON 形态 {"result": R}
+
+    提交契约 SSOT 的两半都在本模块 —— 编码侧 return_result_tool_param (schema 即 {"result": 返回值schema}),
+    解码侧本 Struct (出口校验与 agent 环内校验共用, issue #28).
+    '''
+    result: R
+
+
 def return_result_tool_param(return_schema: dict[str, Any]) -> ChatCompletionToolParam:
     ''' 构造 "return_result" 工具的 OpenAI 参数: 参数 schema 即 {"result": 返回值schema}
 

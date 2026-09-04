@@ -300,8 +300,8 @@ class _LinkedNode(msgspec.Struct):
 def test_reasoning_agent_nonrecursive_return_schema_derefd():
     ''' 非递归 Struct 返回类型 (raw 顶层 $ref): 请求中的 return_result 参数 schema 为 deref 展开形态
     (spec.return_schema 已是 raw, 门控消费点必须 resolve —— 漏掉则 $ref 形态静默透传, 偏离历史行为) '''
-    conn = ScriptedCompletionConnection([make_tool_call_completion("return_result", '{"result": "x"}')])
-    spec = replace(make_spec(), return_schema = msgspec.json.schema(_ArgObj))
+    conn = ScriptedCompletionConnection([make_tool_call_completion("return_result", '{"result": {"python_expression": "x"}}')])
+    spec = replace(make_spec(), return_schema = msgspec.json.schema(_ArgObj), return_annotation = _ArgObj)  # 注解与 schema 同源 (issue #28 环内校验)
     agent = ReasoningAgent(spec, FAKE_TOOLS_MODEL, cast(LlmConnection, conn))
 
     agent.run('{}').wait()
