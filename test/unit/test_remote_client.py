@@ -13,6 +13,8 @@ import time
 from typing import Any
 
 import httpx
+import json
+
 import pytest
 
 from ai_powered.agent import AgentRunError
@@ -140,6 +142,8 @@ class FakeAgentService:
     seen_invoke_agent_ids: list[str]
     #: 任务查询实际命中的 task_id 序列, 轮询路由断言用
     seen_task_ids: list[str]
+    #: 最近一次 invoke 请求体 (JSON str, 信封形态断言用)
+    last_invoke_body: str
 
     def __init__(self, *, register_script: list[httpx.Response | Exception] | None = None, invoke_script: list[httpx.Response | Exception] | None = None, task_script: list[httpx.Response | Exception] | None = None) -> None:
         self.register_script: list[httpx.Response | Exception] = register_script if register_script is not None else [_register_ok("agent-001")]
@@ -150,6 +154,7 @@ class FakeAgentService:
         self.task_calls = 0
         self.seen_invoke_agent_ids = []
         self.seen_task_ids = []
+        self.last_invoke_body = ""
 
     @staticmethod
     def _next(script: list[httpx.Response | Exception], nth: int) -> httpx.Response | Exception:
@@ -163,6 +168,7 @@ class FakeAgentService:
         elif request.method == "POST" and path.startswith("/v1/agents/") and path.endswith("/invoke"):
             step = self._next(self.invoke_script, self.invoke_calls)
             self.seen_invoke_agent_ids.append(path.removeprefix("/v1/agents/").removesuffix("/invoke"))
+            self.last_invoke_body = request.content.decode("utf-8")
             self.invoke_calls += 1
         elif request.method == "GET" and path.startswith("/v1/tasks/"):
             step = self._next(self.task_script, self.task_calls)
@@ -176,6 +182,43 @@ class FakeAgentService:
 
     def make_client(self, **kwargs: Any) -> AgentServiceClient:
         return _offline_client(httpx.MockTransport(self.handler), **kwargs)
+
+
+def test_invoke_envelope_carries_optional_scheduling_params() -> None:
+    """提交信封携带调度参数: priority/budget_tokens 显式传值时进 body, 缺省不发键 (M1a §10)"""
+    svc = FakeAgentService()
+    client = svc.make_client()
+    assert client.invoke(DEFN, {"text": "hi"}, priority = 5, budget_tokens = 4321).wait() == "ok"
+    body = json.loads(svc.last_invoke_body)
+    assert body == {"input": {"text": "hi"}, "priority": 5, "budget_tokens": 4321}
+    # 缺省形态: 只有 input 键 (服务端 pydantic 默认值对齐)
+    assert client.invoke(DEFN_2, {"text": "x"}).wait() == "ok"
+    body2 = json.loads(svc.last_invoke_body)
+    assert body2 == {"input": {"text": "x"}}
+
+
+def test_invoke_envelope_rejected_falls_back_to_legacy_body() -> None:
+    """422 回退: 未升级服务端不识信封 (按 input spec 校验整个 body 而拒) -> 裸输入重发,
+    旧契约 200 同步信封直接取结果 (切换窗口期兼容)"""
+    svc = FakeAgentService(
+        invoke_script = [
+            httpx.Response(422, json = _error_body("invalid_request", "输入不符合 input spec: ...")),
+            _invoke_completed({"result": "legacy-ok"}),
+        ],
+    )
+    client = svc.make_client()
+    assert client.invoke(DEFN, {"text": "hi"}).wait() == {"result": "legacy-ok"}
+    assert svc.invoke_calls == 2  # 信封被拒 -> 裸输入重发一次
+
+
+def test_invoke_real_rejection_surfaces_after_fallback() -> None:
+    """新服务端 + 输入真违约: 回退的裸输入同样被拒 (input 键缺失), 透传第二次 422"""
+    rejection = httpx.Response(422, json = _error_body("invalid_request", "输入不符合 input spec: text: Input should be a valid string"))
+    svc = FakeAgentService(invoke_script = [rejection, rejection])
+    client = svc.make_client()
+    with pytest.raises(RemoteContractError, match = "invoke rejected"):
+        client.invoke(DEFN, {"text": 42}).wait()
+    assert svc.invoke_calls == 2
 
 
 def test_register_returns_agent_id() -> None:

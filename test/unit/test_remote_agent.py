@@ -145,7 +145,7 @@ def test_full_chain_sync(service_env: None) -> None:
         "fields": {"a": {"type": {"kind": "int"}}, "b": {"type": {"kind": "int"}}},
     }
     invoke_body = next(body for path, body in fake.requests if path.endswith("/invoke"))
-    assert invoke_body == {"a": 1, "b": 2}
+    assert invoke_body == {"input": {"a": 1, "b": 2}}  # M1a 信封: 调度参数缺省不发键
 
 
 @pytest.mark.asyncio
@@ -348,11 +348,11 @@ def test_default_parameters_omissible_on_input(service_env: None) -> None:
         "punctuation": {"type": {"kind": "maybe", "element": {"kind": "string"}}},
     }
     first_body = [body for path, body in fake.requests if path.endswith("/invoke")][0]
-    assert first_body == {"name": "bob"}
+    assert first_body == {"input": {"name": "bob"}}  # M1a 信封, 调度参数缺省不发键
 
     assert greet("alice", "?") == "hello!"  # 显式传参: body 携带全字段
     second_body = [body for path, body in fake.requests if path.endswith("/invoke")][1]
-    assert second_body == {"name": "alice", "punctuation": "?"}
+    assert second_body == {"input": {"name": "alice", "punctuation": "?"}}
 
 
 def test_failfast_reserved_parameter_name(service_env: None) -> None:

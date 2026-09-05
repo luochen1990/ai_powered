@@ -71,6 +71,7 @@ class RemoteAgent(FunctionAgent):
       tools 引用名须在服务端 AGENT_SERVICE_TOOL_CATALOG 目录内 (白名单服务端管控, 注册方只引用名);
       未知名在首次调用的注册期报 RemoteContractError (不可 retry) —— 客户端无法本地校验白名单,
       属已知的 fail-fast 边界. 默认 [] = 仅服务端沙箱六件套 (Bash/Read/Write/Edit/Grep/Glob).
+      priority/budget_tokens: 调度参数透传 (M1a 提交信封, 见 client.py 模块头)
       更深度的定制可覆盖 _build_definition 整体接管 defn 组装 (开放出口, 对齐 _create_client 的 seam 惯例).
 
     装饰期 fail-fast (零网络): 类型不被远程通道支持 (dict/裸 Union/递归等, 见
@@ -83,6 +84,11 @@ class RemoteAgent(FunctionAgent):
     poll_interval: ClassVar[float] = DEFAULT_POLL_INTERVAL
     tools: ClassVar[list[str]] = []
     required_features: ClassVar[set[ModelFeature]] = set()
+    #: 调度参数 (M1a 信封透传, agent-service issue #30 spec §10): priority 大者优先,
+    #: budget_tokens 为任务 token 预算 (服务端预授+结算不可超); agent 级常量 (同一
+    #: agent 族的全部调用同参), 按调用差异化属调用方自行组 client 的范畴
+    priority: ClassVar[int] = 0
+    budget_tokens: ClassVar[int | None] = None
 
     _defn: dict[str, Any]
     _client: AgentServiceClient
@@ -143,5 +149,8 @@ class RemoteAgent(FunctionAgent):
         input_obj = json.loads(arguments_json)
         if not isinstance(input_obj, dict):  # 契约外输入防御: 装饰器层 encode 的恒是 Bind.arguments (dict)
             raise ValueError(f"RemoteAgent.run expects a JSON object, got: {arguments_json[:100]!r}")
-        result = await self._client.invoke(self._defn, input_obj)
+        result = await self._client.invoke(
+            self._defn, input_obj,
+            priority = type(self).priority, budget_tokens = type(self).budget_tokens,
+        )
         return json.dumps(result, ensure_ascii = False)

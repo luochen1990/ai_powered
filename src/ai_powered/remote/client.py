@@ -8,10 +8,13 @@ wire 契约 (服务端: agent-service 仓, 异步化契约见其 issue #30 spec 
 - 注册 (跨契约切换不变): body = AgentDefinition JSON dict (name/system_prompt/model/
   input_spec/output_spec, tools/definitions 可省); 200 -> {"agent_id": str}; 幂等
   (服务端内容寻址, 同 defn 必同 id)
-- 提交: body = 按注册 input_spec 校验的输入 JSON object (请求体形态跨契约切换不变,
-  响应码即版本判别器; 服务端规划中的 {input, priority?, budget_tokens?} 信封落地时
-  再行同步); 新契约 202 -> {"task_id": str, "status": "queued"}; 旧契约 (过渡兼容,
-  切换窗口期的未升级服务端) 200 -> 同步信封, 直接解析结果
+- 提交: body = {input, priority?, budget_tokens?} 信封 (M1a 异步契约, agent-service
+  issue #30 spec §10 —— input 为按注册 input_spec 校验的输入 JSON object, priority/
+  budget_tokens 为可选调度参数, 缺省不发键); 新契约 202 -> {"task_id": str,
+  "status": "queued"}; 旧契约 (过渡兼容, 切换窗口期的未升级服务端) 收裸输入 JSON
+  object 作请求体, 200 -> 同步信封直接解析结果 —— 兼容策略: 首发信封, 422 (输入
+  校验拒绝) 时回退裸输入重发一次 (未升级服务端形态); 新服务端下输入真违约时回退
+  发同样被拒 (input 键缺失), 透传第二次 422, 语义不变仅多一请求
 - 任务查询: GET /v1/tasks/{task_id} -> {"task_id", "status", "rounds", "tokens_used"}
   - 非终态 status: queued | running | paused (rounds/tokens_used 为观测字段, 客户端不消费)
   - 终态 done: 附 result (输出 spec 规范 JSON) / engine / elapsed_ms / usage
@@ -138,6 +141,20 @@ def _invoke_path(agent_id: str) -> str:
 def _task_path(task_id: str) -> str:
     ''' task_id 做路径段 quoting (同 _invoke_path 的防御性惯例) '''
     return f"{_TASKS_PATH}/{urllib.parse.quote(task_id, safe = '')}"
+
+
+def _invoke_body(
+    input: Mapping[str, Any], priority: int, budget_tokens: int | None,
+) -> dict[str, Any]:
+    ''' 提交请求体构造 (M1a 信封契约): {input, priority?, budget_tokens?} ——
+    调度参数取缺省值 (priority=0 / budget=None) 时不发键, 与服务端 pydantic
+    契约的默认值对齐 (发的键越少, wire 上与裸信封形态越难区分) '''
+    body: dict[str, Any] = {"input": dict(input)}
+    if priority:
+        body["priority"] = priority
+    if budget_tokens is not None:
+        body["budget_tokens"] = budget_tokens
+    return body
 
 
 def _cache_key(defn: Mapping[str, Any]) -> str:
@@ -284,8 +301,8 @@ class AgentServiceClient:
     _agent_ids: dict[str, str]
     #: 双形态实现载体 (构造期由 sync_compatible 包装生成, 见模块头 "双形态约束")
     _register_agent: Callable[[Mapping[str, Any]], Waitable[str]]
-    _invoke_agent: Callable[[str, Mapping[str, Any]], Waitable[Any]]
-    _invoke: Callable[[Mapping[str, Any], Mapping[str, Any]], Waitable[Any]]
+    _invoke_agent: Callable[..., Waitable[Any]]
+    _invoke: Callable[..., Waitable[Any]]
 
     def __init__(self, base_url: str, *, timeout: float = DEFAULT_INVOKE_TIMEOUT, poll_interval: float = DEFAULT_POLL_INTERVAL, transport: httpx.BaseTransport | httpx.AsyncBaseTransport | None = None) -> None:
         ''' timeout: 提交+轮询总预算 (兼容路径下即单次 invoke 请求预算, 两语义在旧服务端上重合);
@@ -339,56 +356,81 @@ class AgentServiceClient:
                     return payload
                 time.sleep(min(poll_interval, max(0.0, deadline - time.monotonic())))
 
-        async def async_run_invocation(agent_id: str, input: Mapping[str, Any]) -> Any:
-            ''' 提交 + 按响应版本分流 (202 -> 轮询至终态; 200 旧信封 -> 直取结果) —— 两门面的共用序列 '''
+        async def async_run_invocation(
+            agent_id: str, input: Mapping[str, Any],
+            priority: int = 0, budget_tokens: int | None = None,
+        ) -> Any:
+            ''' 提交 + 按响应版本分流 (202 -> 轮询至终态; 200 旧信封 -> 直取结果) —— 两门面的共用序列;
+            首发信封形态, 422 时回退裸输入重发一次 (未升级服务端, 见模块头兼容策略) '''
             deadline = time.monotonic() + timeout  # 预算锚点: 提交前 (注册往返不占预算; heal 重试重新起算)
-            submitted, payload = _map_invoke_response(await self._post_async(_invoke_path(agent_id), input))
+            response = await self._post_async(_invoke_path(agent_id), _invoke_body(input, priority, budget_tokens))
+            if response.status_code == 422:
+                response = await self._post_async(_invoke_path(agent_id), input)
+            submitted, payload = _map_invoke_response(response)
             return await async_poll_terminal(payload, deadline) if submitted else payload
 
-        def sync_run_invocation(agent_id: str, input: Mapping[str, Any]) -> Any:
+        def sync_run_invocation(
+            agent_id: str, input: Mapping[str, Any],
+            priority: int = 0, budget_tokens: int | None = None,
+        ) -> Any:
             deadline = time.monotonic() + timeout
-            submitted, payload = _map_invoke_response(self._post_sync(_invoke_path(agent_id), input))
+            response = self._post_sync(_invoke_path(agent_id), _invoke_body(input, priority, budget_tokens))
+            if response.status_code == 422:
+                response = self._post_sync(_invoke_path(agent_id), input)
+            submitted, payload = _map_invoke_response(response)
             return sync_poll_terminal(payload, deadline) if submitted else payload
 
-        async def async_invoke_agent(agent_id: str, input: Mapping[str, Any]) -> Any:
+        async def async_invoke_agent(
+            agent_id: str, input: Mapping[str, Any],
+            priority: int = 0, budget_tokens: int | None = None,
+        ) -> Any:
             try:
-                return await async_run_invocation(agent_id, input)
+                return await async_run_invocation(agent_id, input, priority, budget_tokens)
             except _AgentNotFound as e:
                 raise AgentRunError(str(e)) from e
 
-        def sync_invoke_agent(agent_id: str, input: Mapping[str, Any]) -> Any:
+        def sync_invoke_agent(
+            agent_id: str, input: Mapping[str, Any],
+            priority: int = 0, budget_tokens: int | None = None,
+        ) -> Any:
             try:
-                return sync_run_invocation(agent_id, input)
+                return sync_run_invocation(agent_id, input, priority, budget_tokens)
             except _AgentNotFound as e:
                 raise AgentRunError(str(e)) from e
 
-        async def async_invoke(defn: Mapping[str, Any], input: Mapping[str, Any]) -> Any:
+        async def async_invoke(
+            defn: Mapping[str, Any], input: Mapping[str, Any],
+            priority: int = 0, budget_tokens: int | None = None,
+        ) -> Any:
             key = _cache_key(defn)
             agent_id = self._agent_ids.get(key)
             if agent_id is None:
                 agent_id = await async_register(defn)
             try:
-                return await async_run_invocation(agent_id, input)
+                return await async_run_invocation(agent_id, input, priority, budget_tokens)
             except _AgentNotFound:
                 self._agent_ids.pop(key, None)  # 注册表丢失 => 陈旧缓存作废 (先弃后建, 重注册失败也不留脏项)
                 agent_id = await async_register(defn)  # 幂等重注册
                 try:
-                    return await async_run_invocation(agent_id, input)
+                    return await async_run_invocation(agent_id, input, priority, budget_tokens)
                 except _AgentNotFound as second:
                     raise AgentRunError(f"agent still not found after re-registration: {second}") from second
 
-        def sync_invoke(defn: Mapping[str, Any], input: Mapping[str, Any]) -> Any:
+        def sync_invoke(
+            defn: Mapping[str, Any], input: Mapping[str, Any],
+            priority: int = 0, budget_tokens: int | None = None,
+        ) -> Any:
             key = _cache_key(defn)
             agent_id = self._agent_ids.get(key)
             if agent_id is None:
                 agent_id = sync_register(defn)
             try:
-                return sync_run_invocation(agent_id, input)
+                return sync_run_invocation(agent_id, input, priority, budget_tokens)
             except _AgentNotFound:
                 self._agent_ids.pop(key, None)
                 agent_id = sync_register(defn)
                 try:
-                    return sync_run_invocation(agent_id, input)
+                    return sync_run_invocation(agent_id, input, priority, budget_tokens)
                 except _AgentNotFound as second:
                     raise AgentRunError(f"agent still not found after re-registration: {second}") from second
 
@@ -418,16 +460,24 @@ class AgentServiceClient:
         ''' 注册 (或幂等重注册) 一个动态 agent, 返回其 agent_id '''
         return self._register_agent(defn)
 
-    def invoke_agent(self, agent_id: str, input: Mapping[str, Any]) -> Waitable[Any]:
+    def invoke_agent(
+        self, agent_id: str, input: Mapping[str, Any],
+        *, priority: int = 0, budget_tokens: int | None = None,
+    ) -> Waitable[Any]:
         ''' 单发调用已注册 agent (提交+轮询至终态) —— 无 defn 可自愈, 404 直接
-        AgentRunError; 需自愈请走 invoke 门面 '''
-        return self._invoke_agent(agent_id, input)
+        AgentRunError; 需自愈请走 invoke 门面; priority/budget_tokens 为可选调度
+        参数 (M1a 信封, 缺省不发键) '''
+        return self._invoke_agent(agent_id, input, priority = priority, budget_tokens = budget_tokens)
 
-    def invoke(self, defn: Mapping[str, Any], input: Mapping[str, Any]) -> Waitable[Any]:
+    def invoke(
+        self, defn: Mapping[str, Any], input: Mapping[str, Any],
+        *, priority: int = 0, budget_tokens: int | None = None,
+    ) -> Waitable[Any]:
         ''' 组合门面 (上游 RemoteAgent.run 的主入口): 缓存命中免注册往返, miss 则注册;
         提交 (202) + 轮询至终态返回 result 字段值 (未升级服务端的 200 旧信封直接取结果);
-        invoke 404 自愈 (弃缓存 -> 重注册 -> 重试一次) '''
-        return self._invoke(defn, input)
+        invoke 404 自愈 (弃缓存 -> 重注册 -> 重试一次); priority/budget_tokens 为可选
+        调度参数 (M1a 信封, 缺省不发键) '''
+        return self._invoke(defn, input, priority = priority, budget_tokens = budget_tokens)
 
     def _remember(self, defn: Mapping[str, Any], agent_id: str) -> str:
         ''' 注册成功的公共后置: 写入内容寻址缓存 (register_agent 公共路径与 invoke 门面的 miss/heal 路径共用) '''
