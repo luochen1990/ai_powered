@@ -18,6 +18,11 @@ TypeDesc ADT spec, LLM 调用与沙箱执行全部发生在服务端 (凭证服�
 首次调用经 AgentServiceClient.invoke 完成注册; 服务端注册表内存态重启即清,
 404 自愈 (弃缓存重注册) 由 client 门面内置, 见 client.py 头注释.
 
+调用契约 (agent-service issue #30 契约异步化): invoke 经 202+task_id 提交,
+client 内部轮询 GET /v1/tasks/{task_id} 至终态 —— 对装饰器/调用方完全透明
+(sync/async 双外观不变); 终态 failed/cancelled/预算耗尽分别经
+RemoteTaskFailed/RemoteTaskCancelled/RemoteTaskTimeout 透出 (语义见 client.py).
+
 测试注入 seam: _create_client 工厂 (对齐 GenericAgent._create_sandbox 惯例) ——
 子类覆盖以注入 httpx.MockTransport, 离线驱动全链路.
 '''
@@ -32,7 +37,7 @@ from ..constants import SYSTEM_PROMPT_RETURN_SCHEMA, base_system_prompt
 from ..llm.connection import LlmConnection
 from ..llm.definitions import FunctionSpec, ModelFeature
 from ..llm.known_models import ModelConfig
-from .client import DEFAULT_INVOKE_TIMEOUT, AgentServiceClient
+from .client import DEFAULT_INVOKE_TIMEOUT, DEFAULT_POLL_INTERVAL, AgentServiceClient
 from .type_desc import RESERVED_NAME_REASON, compile_type, field_type, is_reserved_field_name
 
 #: 服务端地址的环境变量 (解析优先级: 类属性 service_url > 此环境变量)
@@ -60,7 +65,8 @@ class RemoteAgent(FunctionAgent):
         class MyAgent(RemoteAgent):
             service_url = "https://agents.internal:8300"   # 固定端点
             default_model = "glm-5.3"                      # 固定注册模型 (优先于装饰器解析)
-            invoke_timeout = 300.0                         # 任务级超时 (默认 120s —— 服务端沙箱任务典型 20-35s 量级)
+            invoke_timeout = 300.0                         # 任务级超时 = 提交+轮询总预算 (默认 120s —— 服务端沙箱任务典型 20-35s 量级)
+            poll_interval = 1.0                            # 任务轮询间隔 (默认 0.5s, 固定间隔的决策见 client.py 头注释)
             tools = ["web-search", "akshare"]              # 宿主侧 MCP 工具白名单引用
       tools 引用名须在服务端 AGENT_SERVICE_TOOL_CATALOG 目录内 (白名单服务端管控, 注册方只引用名);
       未知名在首次调用的注册期报 RemoteContractError (不可 retry) —— 客户端无法本地校验白名单,
@@ -74,6 +80,7 @@ class RemoteAgent(FunctionAgent):
     service_url: ClassVar[str | None] = None
     default_model: ClassVar[str | None] = None
     invoke_timeout: ClassVar[float] = DEFAULT_INVOKE_TIMEOUT
+    poll_interval: ClassVar[float] = DEFAULT_POLL_INTERVAL
     tools: ClassVar[list[str]] = []
     required_features: ClassVar[set[ModelFeature]] = set()
 
@@ -96,7 +103,7 @@ class RemoteAgent(FunctionAgent):
 
     def _create_client(self, url: str) -> AgentServiceClient:
         ''' client 工厂 (独立方法: 测试子类可覆盖以注入 transport, 对齐 GenericAgent._create_sandbox 惯例) '''
-        return AgentServiceClient(url, timeout = type(self).invoke_timeout)
+        return AgentServiceClient(url, timeout = type(self).invoke_timeout, poll_interval = type(self).poll_interval)
 
     def _build_definition(self, model: str) -> dict[str, Any]:
         ''' FunctionSpec -> AgentDefinition dict (装饰期纯本地编译, 网络交互延迟到首次调用)

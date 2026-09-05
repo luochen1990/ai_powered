@@ -1,10 +1,11 @@
 '''
 职责: RemoteAgent 的离线单元测试 —— 覆盖 defn 组装正确性 / 出口协议对齐 (Result[R] 形态) /
-装饰器全链路 (sync 与 async) / 注册缓存 / retry 集成 / invoke 404 自愈链路 / 装饰期 fail-fast.
+装饰器全链路 (sync 与 async) / 注册缓存 / retry 集成 / invoke 404 自愈链路 / cancelled
+不经 retry 直达调用方 / 装饰期 fail-fast.
 
 全部离线: 经 _create_client 工厂注入 httpx.MockTransport 模拟 agent-service 的 wire 契约
-(注册幂等 + invoke 信封), 与 test_remote_client.py 的差异: 此处验证 装饰器→agent→client
-的完整链路组装, wire 层细节在彼处.
+(注册幂等 + 202 提交 + 任务轮询终态), 与 test_remote_client.py 的差异: 此处验证
+装饰器→agent→client 的完整链路组装, wire 层细节在彼处.
 '''
 import json
 from typing import Any, ClassVar
@@ -14,18 +15,26 @@ import pytest
 
 from ai_powered import ai_powered
 from ai_powered.llm.resolver import resolve_model
-from ai_powered.remote import SERVICE_URL_ENV, RemoteAgent
+from ai_powered.remote import SERVICE_URL_ENV, RemoteAgent, RemoteTaskCancelled
 from ai_powered.remote.client import AgentServiceClient
 
 _FAKE_URL = "http://fake-agent-service:8300"
 
+#: fake 服务端使用的固定标识 (提交/查询两端点共用)
+_AGENT_ID = "test-agent-id"
+_TASK_ID = "task-001"
+
 
 class FakeAgentService:
-    '''脚本化 agent-service: spy 记录请求 + 可编程的 invoke 响应序列 (404 自愈/retry 场景)'''
+    '''脚本化 agent-service: spy 记录请求 + 可编程的提交/任务响应序列 (404 自愈/retry 场景).
 
-    def __init__(self, invoke_script: list[httpx.Response] | None = None) -> None:
+    与 test_remote_client.py 的 FakeAgentService 差异: 脚本耗尽抛 IndexError (fail-fast) 而非
+    重复末元素 —— agent 层用例依赖精确序列 (retry/自愈的路由断言不容末元素混入).'''
+
+    def __init__(self, invoke_script: list[httpx.Response] | None = None, task_script: list[httpx.Response] | None = None) -> None:
         self.requests: list[tuple[str, Any]] = []  # (path, json body)
         self._invoke_script = list(invoke_script) if invoke_script is not None else None
+        self._task_script = list(task_script) if task_script is not None else None
 
     @property
     def transport(self) -> httpx.MockTransport:
@@ -35,16 +44,32 @@ class FakeAgentService:
         body = json.loads(request.content.decode("utf-8")) if request.content else None
         self.requests.append((request.url.path, body))
         if request.url.path == "/v1/agents":
-            return httpx.Response(200, json = {"agent_id": "test-agent-id"})
-        if request.url.path == "/v1/agents/test-agent-id/invoke":
+            return httpx.Response(200, json = {"agent_id": _AGENT_ID})
+        if request.url.path == f"/v1/agents/{_AGENT_ID}/invoke":
             if self._invoke_script is not None:
                 return self._invoke_script.pop(0)
-            return self._invoke_ok({"result": 42})
+            return self._submit_accepted()
+        if request.url.path == f"/v1/tasks/{_TASK_ID}":
+            if self._task_script is not None:
+                return self._task_script.pop(0)
+            return self._task_done({"result": 42})
         raise AssertionError(f"unexpected request: {request.url.path}")
 
     @staticmethod
-    def _invoke_ok(result: Any) -> httpx.Response:
-        return httpx.Response(200, json = {"status": "completed", "engine": "fake", "elapsed_ms": 1, "result": result})
+    def _submit_accepted() -> httpx.Response:
+        return httpx.Response(202, json = {"task_id": _TASK_ID, "status": "queued"})
+
+    @staticmethod
+    def _task_done(result: Any) -> httpx.Response:
+        return httpx.Response(200, json = {"task_id": _TASK_ID, "status": "done", "rounds": 2, "tokens_used": 20, "result": result, "engine": "fake", "elapsed_ms": 1, "usage": None})
+
+    @staticmethod
+    def _task_failed(message: str) -> httpx.Response:
+        return httpx.Response(200, json = {"task_id": _TASK_ID, "status": "failed", "rounds": 1, "tokens_used": 10, "error": message, "engine": "fake", "elapsed_ms": 1})
+
+    @staticmethod
+    def _task_cancelled(message: str) -> httpx.Response:
+        return httpx.Response(200, json = {"task_id": _TASK_ID, "status": "cancelled", "rounds": 0, "tokens_used": 0, "error": message})
 
     @property
     def register_count(self) -> int:
@@ -64,10 +89,11 @@ class FakeAgentService:
 
 
 def make_agent_cls(transport: httpx.MockTransport) -> type[RemoteAgent]:
-    '''测试注入 seam: 覆盖 _create_client 以替换真实网络 (对齐 test_generic_agent 的 Fake sandbox 惯例)'''
+    '''测试注入 seam: 覆盖 _create_client 以替换真实网络 (对齐 test_generic_agent 的 Fake sandbox 惯例);
+    轮询间隔压到毫秒级, 测试耗时与生产默认 0.5s 解耦'''
     class _TestAgent(RemoteAgent):
         def _create_client(self, url: str) -> AgentServiceClient:
-            return AgentServiceClient(url, transport = transport)
+            return AgentServiceClient(url, transport = transport, poll_interval = 0.01)
     return _TestAgent
 
 
@@ -102,7 +128,7 @@ def test_definition_shape(service_env: None) -> None:
 
 
 def test_full_chain_sync(service_env: None) -> None:
-    ''' 装饰器全链路 (sync): 参数打包 -> 注册 -> invoke -> Result[R] 出口校验 -> 返回值 '''
+    ''' 装饰器全链路 (sync): 参数打包 -> 注册 -> 202 提交 -> 轮询 done -> Result[R] 出口校验 -> 返回值 '''
     fake = FakeAgentService()
     agent_cls = make_agent_cls(fake.transport)
 
@@ -152,12 +178,13 @@ def test_register_cached_across_calls(service_env: None) -> None:
     assert fake.invoke_count == 2
 
 
-def test_retry_on_failed_envelope(service_env: None) -> None:
-    ''' failed 信封 -> AgentRunError -> @ai_powered(retry=N) 接管: 服务端瞬时失败可重试 '''
-    fake = FakeAgentService(invoke_script = [
-        httpx.Response(200, json = {"status": "failed", "engine": "fake", "elapsed_ms": 1, "error": "boom"}),
-        FakeAgentService._invoke_ok({"result": 7}),
-    ])
+def test_retry_on_failed_task(service_env: None) -> None:
+    ''' failed 终态 -> RemoteTaskFailed (AgentRunError 族) -> @ai_powered(retry=N) 接管:
+    重试单元是整个 agent run (重新提交新任务), 服务端瞬时失败可重试 '''
+    fake = FakeAgentService(
+        invoke_script = [FakeAgentService._submit_accepted(), FakeAgentService._submit_accepted()],
+        task_script = [FakeAgentService._task_failed("boom"), FakeAgentService._task_done({"result": 7})],
+    )
     agent_cls = make_agent_cls(fake.transport)
 
     @ai_powered(model = "fake-model", agent = agent_cls, retry = 1)
@@ -169,11 +196,27 @@ def test_retry_on_failed_envelope(service_env: None) -> None:
     assert fake.invoke_count == 2
 
 
+def test_cancelled_task_propagates_without_retry(service_env: None) -> None:
+    ''' cancelled 终态 -> RemoteTaskCancelled 不在可重试族, retry=N 也不接管 ——
+    取消是显式决策, 异常直达调用方 (自动重试会静默重提交新任务) '''
+    fake = FakeAgentService(task_script = [FakeAgentService._task_cancelled("killed by operator")])
+    agent_cls = make_agent_cls(fake.transport)
+
+    @ai_powered(model = "fake-model", agent = agent_cls, retry = 2)
+    def add(a: int, b: int) -> int:
+        ''' Add two numbers. '''
+        ...
+
+    with pytest.raises(RemoteTaskCancelled, match = "killed by operator"):
+        add(1, 2)
+    assert fake.invoke_count == 1  # 未发生重试
+
+
 def test_invoke_404_heals_via_reregistration(service_env: None) -> None:
     ''' 服务端重启 (注册表丢失) -> 404 自愈: 弃缓存重注册 -> 重试成功 '''
     fake = FakeAgentService(invoke_script = [
         httpx.Response(404, json = {"error": {"code": "agent_not_found", "message": "未注册"}}),
-        FakeAgentService._invoke_ok({"result": 42}),
+        FakeAgentService._submit_accepted(),
     ])
     agent_cls = make_agent_cls(fake.transport)
 
@@ -230,7 +273,7 @@ def test_default_model_class_attribute_overrides(service_env: None) -> None:
     class PinnedModelAgent(RemoteAgent):
         default_model: ClassVar[str | None] = "pinned-model"
         def _create_client(self, url: str) -> AgentServiceClient:
-            return AgentServiceClient(url, transport = fake.transport)
+            return AgentServiceClient(url, transport = fake.transport, poll_interval = 0.01)
 
     @ai_powered(model = "fake-model", agent = PinnedModelAgent)
     def add(a: int, b: int) -> int:
@@ -250,7 +293,7 @@ def test_service_url_class_attribute_override(monkeypatch: pytest.MonkeyPatch) -
         service_url: ClassVar[str | None] = _FAKE_URL
         def _create_client(self, url: str) -> AgentServiceClient:
             assert url == _FAKE_URL
-            return AgentServiceClient(url, transport = fake.transport)
+            return AgentServiceClient(url, transport = fake.transport, poll_interval = 0.01)
 
     @ai_powered(model = "fake-model", agent = PinnedAgent)
     def add(a: int, b: int) -> int:
@@ -279,7 +322,7 @@ def test_output_default_fields_required_and_dump_compatible(service_env: None) -
         ...
 
     # 服务端 canonical dump 形态: 恒含全部字段 (必选编译下 LLM 恒造值, 无 null 陷阱)
-    fake._invoke_script = [FakeAgentService._invoke_ok({"result": {"name": "bob", "age": 5}})]
+    fake._task_script = [FakeAgentService._task_done({"result": {"name": "bob", "age": 5}})]
     assert extract("bob is 5") == UserInfo(name = "bob", age = 5)
     # output_spec 的 age 必选 (不带 maybe 包装)
     assert fake.registered_defn["output_spec"]["fields"]["result"]["type"]["fields"]["age"] == {"type": {"kind": "int"}}
@@ -288,9 +331,9 @@ def test_output_default_fields_required_and_dump_compatible(service_env: None) -
 def test_default_parameters_omissible_on_input(service_env: None) -> None:
     ''' 输入侧缺省语境: 带 default 的参数在 input_spec 包 maybe (调用方省略时 bind 不含该参数,
     服务端输入校验对 maybe 允许省略); 显式传参时 body 照常携带 '''
-    fake = FakeAgentService(invoke_script = [
-        FakeAgentService._invoke_ok({"result": "hello!"}),
-        FakeAgentService._invoke_ok({"result": "hello!"}),
+    fake = FakeAgentService(task_script = [
+        FakeAgentService._task_done({"result": "hello!"}),
+        FakeAgentService._task_done({"result": "hello!"}),
     ])
     agent_cls = make_agent_cls(fake.transport)
 
@@ -339,7 +382,7 @@ def test_default_param_with_default_fields_combination(service_env: None) -> Non
         label: str
         retries: int = 0
 
-    fake = FakeAgentService(invoke_script = [FakeAgentService._invoke_ok({"result": 1})])
+    fake = FakeAgentService()
     agent_cls = make_agent_cls(fake.transport)
 
     @ai_powered(model = "fake-model", agent = agent_cls)
@@ -347,7 +390,7 @@ def test_default_param_with_default_fields_combination(service_env: None) -> Non
         ''' Run with config. '''
         ...
 
-    assert run_with() == 1  # 参数整体省略: body 为 {}, 顶层 maybe 容忍
+    assert run_with() == 42  # 参数整体省略: body 为 {}, 顶层 maybe 容忍
     assert fake.registered_defn["input_spec"]["fields"]["config"]["type"] == {
         "kind": "maybe",
         "element": {
@@ -363,12 +406,12 @@ def test_default_param_with_default_fields_combination(service_env: None) -> Non
 def test_tools_class_attribute_passed_through(service_env: None) -> None:
     ''' tools 定制面: 继承子类的 ClassVar.tools 透传进注册体 (宿主侧 MCP 白名单引用);
     默认 RemoteAgent 不带 tools 键 (= 服务端仅沙箱六件套) '''
-    fake = FakeAgentService(invoke_script = [FakeAgentService._invoke_ok({"result": "report"})])
+    fake = FakeAgentService(task_script = [FakeAgentService._task_done({"result": "report"})])
 
     class ToolAgent(RemoteAgent):
         tools: ClassVar[list[str]] = ["web-search", "akshare"]
         def _create_client(self, url: str) -> AgentServiceClient:
-            return AgentServiceClient(url, transport = fake.transport)
+            return AgentServiceClient(url, transport = fake.transport, poll_interval = 0.01)
 
     @ai_powered(model = "fake-model", agent = ToolAgent)
     def research(topic: str) -> str:

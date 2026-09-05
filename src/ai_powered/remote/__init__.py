@@ -10,17 +10,20 @@
 
 模块划分:
 - type_desc.py — Python 类型注解 -> TypeDesc JSON 的纯函数编译器 (wire 契约见该文件头注释)
-- client.py — AgentServiceClient: 注册/invoke/404 自愈/错误映射 (httpx 双形态)
+- client.py — AgentServiceClient: 注册/提交+轮询 (202 异步契约)/404 自愈/错误映射 (httpx 双形态)
 - agent.py — RemoteAgent (FunctionAgent 子类, 对等本地 GenericAgent 的远程沙箱引擎)
 '''
 from .agent import RemoteAgent, SERVICE_URL_ENV
-from .client import AgentServiceClient, RemoteContractError
+from .client import AgentServiceClient, RemoteContractError, RemoteTaskCancelled, RemoteTaskFailed, RemoteTaskTimeout
 from .type_desc import UnsupportedTypeError, compile_type
 
 __all__ = [
     "RemoteAgent",
     "AgentServiceClient",
     "RemoteContractError",
+    "RemoteTaskCancelled",
+    "RemoteTaskFailed",
+    "RemoteTaskTimeout",
     "UnsupportedTypeError",
     "compile_type",
     "SERVICE_URL_ENV",

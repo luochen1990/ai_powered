@@ -154,13 +154,18 @@ Registration happens lazily on the first call (and self-heals after a service re
 export AI_POWERED_AGENT_SERVICE_URL=https://your-agent-service-host
 ```
 
-For deployment-specific defaults — endpoint, model, task timeout, and server-side MCP tool references — subclass `RemoteAgent` and override the class attributes (the `agent=` parameter accepts any `FunctionAgent` subclass, mirroring how the local `GenericAgent` is customized):
+Calls run on the server's async task contract: `invoke` is submitted as `202 + task_id` and the client polls `GET /v1/tasks/{task_id}` until a terminal state — all invisible to the decorated function (both sync and async call styles keep working, and not-yet-upgraded servers answering with the old synchronous `200` envelope are still accepted during the migration window). Terminal outcomes surface as: `RemoteTaskFailed` (retryable — carries the upstream gateway's `upstream_code` / `next_flush_time` as structured attributes when available), `RemoteTaskCancelled` (deliberately **not** retried — a cancellation is an explicit decision, so the exception reaches your code directly), or `RemoteTaskTimeout` (the submit+poll budget `invoke_timeout` was exhausted; the task may still be running server-side).
+
+For deployment-specific defaults — endpoint, model, task timeout, poll cadence, and server-side MCP tool references — subclass `RemoteAgent` and override the class attributes (the `agent=` parameter accepts any `FunctionAgent` subclass, mirroring how the local `GenericAgent` is customized):
 
 ```python
 class MyResearchAgent(RemoteAgent):
     service_url = "https://agents.internal:8300"
     default_model = "glm-5.3"
-    invoke_timeout = 300.0
+    invoke_timeout = 300.0                        # submit+poll budget (default 120s)
+    poll_interval = 1.0                           # polling cadence (default 0.5s, fixed
+                                                   # interval — see client.py header for
+                                                   # the rationale)
     tools = ["web-search", "akshare"]  # host-side MCP tools; names must be whitelisted
                                         # server-side (AGENT_SERVICE_TOOL_CATALOG) — an
                                         # unknown name surfaces as RemoteContractError on
