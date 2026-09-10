@@ -45,3 +45,36 @@ test-all:
     just test-model
     @echo "=== Step 2: 功能测试 ==="
     just test
+
+# org ci 契约 recipe (阻塞级门禁入口, 见 lc-studio/forgejo-actions README)。
+# CI 判据用 CI env (runner 注入), 不用 VIRTUAL_ENV — 后者是通用 venv 激活变量,
+# 本地开发者激活自己的 venv 跑 just ci 会被误判进 CI 分支 (且戳块 rm -rf 会
+# 销毁其 venv)。本地 (无 CI env) 退化为 poetry run 直调, 不做 venv 复用。
+ci:
+    #!/usr/bin/env bash
+    set -eu
+    # pytest 参数单点定义: use_google_search 直连 googleapis.com, runner VM 不出境
+    # (SYN-SENT 挂起, 曾致 CI 30min 超时) 故 deselect; reruns 3x20s 抗 LLM 抖动
+    pytest_args=(--reruns 3 --reruns-delay 20 --deselect test/examples/chat_bot/use_google_search.py)
+    if [ -n "${CI:-}" ]; then
+        # VIRTUAL_ENV 由 workflow env 指向持久卷; 丢失/GC 由戳块自愈重建
+        STAMP="$VIRTUAL_ENV.python-stamp"
+        WANT="$(python3.13 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+        if [ ! -x "$VIRTUAL_ENV/bin/python" ] || [ "$(cat "$STAMP" 2>/dev/null || true)" != "$WANT" ]; then
+            rm -rf "$VIRTUAL_ENV"
+            python3.13 -m venv "$VIRTUAL_ENV"
+            printf '%s\n' "$WANT" > "$STAMP"
+            echo "venv: created fresh ($WANT)"
+        else
+            echo "venv: reuse ($WANT)"
+        fi
+        export PATH="$VIRTUAL_ENV/bin:$PATH"
+        poetry sync --with test --without dev
+        # -p pyproject.toml: 防 worktree 相对路径外 pyrightconfig 劫持 (同 check recipe)
+        pyright -p pyproject.toml
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        pytest "${pytest_args[@]}"
+    else
+        just check
+        poetry run pytest "${pytest_args[@]}"
+    fi

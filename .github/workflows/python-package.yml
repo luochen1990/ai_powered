@@ -9,6 +9,13 @@ on:
   pull_request:
     branches: [ "master" ]
 
+# PR 并发去旧 (与 forgejo 侧 ci.yml 同机制): 同 PR 快速多次 push 取消旧 run —
+# matrix 4 版本 × LLM 测试烧 OpenRouter 免费层日配额 (1000/day, 2026-08-26 曾被
+# 9 次全量 CI 烧穿), 取消 superseded run 直接省配额
+concurrency:
+  group: py-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
 jobs:
   build:
 

@@ -1,0 +1,92 @@
+# skip-if-passed — org 标准内容去重 (ff-merge 后同 SHA 跳过重复 CI)
+#
+# [定位] CI 机制类逻辑: 少变, 机器同步分发 — 人工不修改本文件; 修改请到 SSOT 上游
+#   (lc-studio/forgejo-actions actions/skip-if-passed), 经 sync 流程分发到各仓库
+#   .forgejo/actions/skip-if-passed/ (漂移检测: tools/check-drift.sh).
+#
+# [职责边界] 查询当前 commit 是否已有成功的本 workflow run, 命中则输出 should_skip=true,
+#   由调用方后续 step 的 if 跳过 (编排留在 workflow, 本 action 只做判定)。
+#
+# [契约]
+#   - 输出: should_skip ('true'/'false'), reason (passed_before / no_history)
+#   - 调用方约定 (薄骨架标准形态):
+#       - name: skip-if-passed
+#         id: skip
+#         uses: ./.forgejo/actions/skip-if-passed
+#         if: github.event_name == 'push'      # 仅 push 事件查询 (PR close-reopen 同 SHA
+#         continue-on-error: true              # 场景, 历史 push run 的 success 会误跳过
+#       #                                    # PR 的验证 — PR 是合并前主场景)
+#       # 后续阻塞 step 均带: if: steps.skip.outputs.should_skip != 'true'
+#   - 本 action 不含 continue-on-error / 事件过滤 (那是编排, 属调用方); API 失败时
+#     curl -sf 返回非零 → step 失败 → 由调用方 continue-on-error 兜底为 fail-open
+#     (should_skip 为空, 后续照常执行), 不阻断 CI。
+#
+# [机制] 不引入本地状态, 不依赖 cache:
+#   GET /repos/{owner}/{repo}/actions/runs?head_sha={sha}&status=success
+#   按 workflow 文件名过滤后非空 → 该 commit 历史上成功过 → should_skip=true
+#
+# [边界]
+#   - 手动 re-run (workflow_dispatch) 也会被判定为跳过 — 调用方用 if 排除 dispatch 事件
+#   - 仅判定 commit SHA, 不判定 tree 内容; squash/rebase merge (SHA 变) 不覆盖
+#   - fail-open 有界: --max-time 30 保证 API 挂起不至于耗完 job timeout
+#
+# [为何单 job 内联形态演进为本 action] 双 job (pre+check) 中 pre 发生 job 级故障时,
+#   check 被静默 skip → CI 绿但零测试 (silent-green-CI, directory-algebra #161); 本地
+#   action + 薄骨架保持单 job 结构, action 文件机器同步杜绝 7 份内联拷贝的漂移重演。
+name: Skip if commit already passed
+description: |
+  若当前 commit 已有成功的本 workflow run, 输出 should_skip=true。
+  典型用途: 避免 ff-merge 后同 commit 重复跑 CI。
+
+inputs:
+  github_token:
+    description: 用于调 API 的 token, 默认用 job 自动注入的 github.token
+    required: false
+    default: ${{ github.token }}
+  workflow_file:
+    description: 过滤的 workflow 文件名 (forgejo 的 workflow_id 即文件路径标识)
+    required: false
+    default: ci.yml
+
+outputs:
+  should_skip:
+    description: "true 或 false (字符串)"
+    value: ${{ steps.check.outputs.should_skip }}
+  reason:
+    description: 判定原因 (passed_before / no_history)
+    value: ${{ steps.check.outputs.reason }}
+
+runs:
+  using: composite
+  steps:
+    - id: check
+      shell: bash
+      env:
+        TOKEN: ${{ inputs.github_token }}
+        API: ${{ github.api_url }}
+        REPO: ${{ github.repository }}
+        SHA: ${{ github.sha }}
+        WORKFLOW_FILE: ${{ inputs.workflow_file }}
+      run: |
+        set -euo pipefail
+        # jq 客户端断言做纵深防御 (不单押服务端参数语义):
+        #   head_sha 复断言 — 防 limit/head_sha 查询参数被该 forgejo 版本忽略时窗口外漏
+        #   workflow_id 兼容裸文件名与路径形式两种格式 (run 9799 实证为裸文件名, 但不押注)
+        #   // [] — API 空结果返回 null 时 jq 迭代会 exit 5 (被 fail-open 掩蔽但报红 step)
+        count=$(curl -sf --max-time 30 -H "Authorization: token $TOKEN" \
+          "$API/repos/$REPO/actions/runs?head_sha=$SHA&status=success&limit=50" \
+          | jq --arg wf "$WORKFLOW_FILE" --arg sha "$SHA" \
+            '[.workflow_runs // [] | .[]
+              | select(.head_sha == $sha)
+              | .workflow_id // ""
+              | select(. == $wf or endswith("/" + $wf))]
+            | length')
+        if [ "$count" -gt 0 ] 2>/dev/null; then
+          echo "should_skip=true" >> "$GITHUB_OUTPUT"
+          echo "reason=passed_before" >> "$GITHUB_OUTPUT"
+          echo "✓ 跳过: commit ${SHA:0:8} 已有成功的 $WORKFLOW_FILE run 记录"
+        else
+          echo "should_skip=false" >> "$GITHUB_OUTPUT"
+          echo "reason=no_history" >> "$GITHUB_OUTPUT"
+          echo "→ 不跳过: commit ${SHA:0:8} 无成功记录, 正常执行"
+        fi
