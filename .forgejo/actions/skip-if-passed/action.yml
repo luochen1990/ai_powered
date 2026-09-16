@@ -21,13 +21,27 @@
 #     curl -sf 返回非零 → step 失败 → 由调用方 continue-on-error 兜底为 fail-open
 #     (should_skip 为空, 后续照常执行), 不阻断 CI。
 #
-# [机制] 不引入本地状态, 不依赖 cache:
-#   GET /repos/{owner}/{repo}/actions/runs?head_sha={sha}&status=success
-#   按 workflow 文件名过滤后非空 → 该 commit 历史上成功过 → should_skip=true
+# [机制] 不引入本地状态, 不依赖 cache — 过滤全量下沉服务端查询参数:
+#   GET /repos/{owner}/{repo}/actions/runs?head_sha={sha}&status=success&workflow_id={wf}
+#   total_count > 0 → 该 commit 已通过本 workflow 门禁 → should_skip=true。
+#   三参数均为 Forgejo 原生查询参数 (v15 LTS / v16 stable 源码验证, run_list.go
+#   ToConds: head_sha→commit_sha / workflow_id 为 builder.Eq 精确匹配, status 走 In):
+#     head_sha    → 钉住被测 commit (tree 随之钉死: 代码 + workflow 定义本体)
+#     workflow_id → 区分同 SHA 上的多道门 (ci vs ci-full, 防跨门毒化 — P0 过 ≠ P1 过,
+#                   故 ci-full 骨架显式传 workflow_file: ci-full.yml)
+#     status      → success
+#   total_count 由 db.FindAndCount 给出, 已含全部过滤条件, 无 limit 窗口截断问题。
+#
+# [教训: v2.2-v2.3 探针从未命中 (issue #5)] 当时客户端 jq 复断言引用了响应中不存在
+#   的字段 (.head_sha — 条目实际字段名是 commit_sha), select 恒空 → count 恒 0 →
+#   永远不跳; 曾据以信任的 "run 9843 活体验证" 实为 feature 分支 push 被 job-if
+#   拦截的 skipped, 并非探针命中。本版修复 = 过滤下沉服务端, 客户端只读 total_count,
+#   不再对响应条目内部字段做任何假设。
 #
 # [边界]
-#   - 手动 re-run (workflow_dispatch) 也会被判定为跳过 — 调用方用 if 排除 dispatch 事件
+#   - 手动 re-run (workflow_dispatch) 的成功记录同样计入 → 调用方用 if 排除 dispatch 事件
 #   - 仅判定 commit SHA, 不判定 tree 内容; squash/rebase merge (SHA 变) 不覆盖
+#   - workflow_id 按裸文件名精确匹配; 上游若改存路径形式则匹配落空 → fail 向不跳 (安全方向)
 #   - fail-open 有界: --max-time 30 保证 API 挂起不至于耗完 job timeout
 #
 # [为何单 job 内联形态演进为本 action] 双 job (pre+check) 中 pre 发生 job 级故障时,
@@ -44,7 +58,7 @@ inputs:
     required: false
     default: ${{ github.token }}
   workflow_file:
-    description: 过滤的 workflow 文件名 (forgejo 的 workflow_id 即文件路径标识)
+    description: 过滤的 workflow 文件名 (须与 forgejo DB 的 workflow_id 一致, 即裸文件名)
     required: false
     default: ci.yml
 
@@ -69,24 +83,15 @@ runs:
         WORKFLOW_FILE: ${{ inputs.workflow_file }}
       run: |
         set -euo pipefail
-        # jq 客户端断言做纵深防御 (不单押服务端参数语义):
-        #   head_sha 复断言 — 防 limit/head_sha 查询参数被该 forgejo 版本忽略时窗口外漏
-        #   workflow_id 兼容裸文件名与路径形式两种格式 (run 9799 实证为裸文件名, 但不押注)
-        #   // [] — API 空结果返回 null 时 jq 迭代会 exit 5 (被 fail-open 掩蔽但报红 step)
         count=$(curl -sf --max-time 30 -H "Authorization: token $TOKEN" \
-          "$API/repos/$REPO/actions/runs?head_sha=$SHA&status=success&limit=50" \
-          | jq --arg wf "$WORKFLOW_FILE" --arg sha "$SHA" \
-            '[.workflow_runs // [] | .[]
-              | select(.head_sha == $sha)
-              | .workflow_id // ""
-              | select(. == $wf or endswith("/" + $wf))]
-            | length')
-        if [ "$count" -gt 0 ] 2>/dev/null; then
+          "$API/repos/$REPO/actions/runs?head_sha=$SHA&status=success&workflow_id=$WORKFLOW_FILE" \
+          | jq '.total_count // 0')
+        if [ "$count" -gt 0 ]; then
           echo "should_skip=true" >> "$GITHUB_OUTPUT"
           echo "reason=passed_before" >> "$GITHUB_OUTPUT"
-          echo "✓ 跳过: commit ${SHA:0:8} 已有成功的 $WORKFLOW_FILE run 记录"
+          echo "✓ 跳过: commit ${SHA:0:8} 已有成功的 $WORKFLOW_FILE run × ${count}"
         else
           echo "should_skip=false" >> "$GITHUB_OUTPUT"
           echo "reason=no_history" >> "$GITHUB_OUTPUT"
-          echo "→ 不跳过: commit ${SHA:0:8} 无成功记录, 正常执行"
+          echo "→ 不跳过: commit ${SHA:0:8} 无成功的 $WORKFLOW_FILE run 记录"
         fi
