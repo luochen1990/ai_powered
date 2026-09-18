@@ -46,11 +46,11 @@ test-all:
     @echo "=== Step 2: 功能测试 ==="
     just test
 
-# org ci 契约 recipe (阻塞级门禁入口, 见 lc-studio/forgejo-actions README)。
+# org ci-merge 契约 recipe (阻塞级门禁入口, 见 lc-studio/forgejo-actions README)。
 # CI 判据用 CI env (runner 注入), 不用 VIRTUAL_ENV — 后者是通用 venv 激活变量,
-# 本地开发者激活自己的 venv 跑 just ci 会被误判进 CI 分支 (且戳块 rm -rf 会
+# 本地开发者激活自己的 venv 跑 just ci-merge 会被误判进 CI 分支 (且戳块 rm -rf 会
 # 销毁其 venv)。本地 (无 CI env) 退化为 poetry run 直调, 不做 venv 复用。
-ci:
+ci-merge:
     #!/usr/bin/env bash
     set -eu
     # pytest 参数单点定义: use_google_search 直连 googleapis.com, runner VM 不出境

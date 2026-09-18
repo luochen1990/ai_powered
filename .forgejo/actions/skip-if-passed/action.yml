@@ -9,13 +9,16 @@
 #
 # [契约]
 #   - 输出: should_skip ('true'/'false'), reason (passed_before / no_history)
-#   - 调用方约定 (薄骨架标准形态):
-#       - name: skip-if-passed
-#         id: skip
-#         uses: ./.forgejo/actions/skip-if-passed
-#         if: github.event_name == 'push'      # 仅 push 事件查询 (PR close-reopen 同 SHA
-#         continue-on-error: true              # 场景, 历史 push run 的 success 会误跳过
-#       #                                    # PR 的验证 — PR 是合并前主场景)
+#   - 调用方约定 (薄骨架标准形态, 按档位两形):
+#     - 门禁档 (ci-merge / ci-deploy 骨架) — 仅 push 事件查询:
+#         if: github.event_name == 'push'      # PR close-reopen 同 SHA 场景, 历史
+#         continue-on-error: true              # push run 的 success 会误跳过 PR 的
+#                                             # 验证 — PR 是合并前主场景
+#     - 周期档 (ci-periodic 骨架) — 仅 schedule 事件查询 (per-SHA 去重; dispatch 是
+#       显式重试意图, 不查询):
+#         if: github.event_name == 'schedule'
+#         continue-on-error: true
+#     - name: skip-if-passed / id: skip / uses: 本地 action 路径
 #       # 后续阻塞 step 均带: if: steps.skip.outputs.should_skip != 'true'
 #   - 本 action 不含 continue-on-error / 事件过滤 (那是编排, 属调用方); API 失败时
 #     curl -sf 返回非零 → step 失败 → 由调用方 continue-on-error 兜底为 fail-open
@@ -27,8 +30,9 @@
 #   三参数均为 Forgejo 原生查询参数 (v15 LTS / v16 stable 源码验证, run_list.go
 #   ToConds: head_sha→commit_sha / workflow_id 为 builder.Eq 精确匹配, status 走 In):
 #     head_sha    → 钉住被测 commit (tree 随之钉死: 代码 + workflow 定义本体)
-#     workflow_id → 区分同 SHA 上的多道门 (ci vs ci-full, 防跨门毒化 — P0 过 ≠ P1 过,
-#                   故 ci-full 骨架显式传 workflow_file: ci-full.yml)
+#     workflow_id → 区分同 SHA 上的多道门 (ci-merge vs ci-deploy vs ci-periodic,
+#                   防跨门毒化 — P0 过 ≠ P1 过, 故 ci-deploy/ci-periodic 骨架显式传
+#                   workflow_file 自指)
 #     status      → success
 #   total_count 由 db.FindAndCount 给出, 已含全部过滤条件, 无 limit 窗口截断问题。
 #
@@ -58,9 +62,9 @@ inputs:
     required: false
     default: ${{ github.token }}
   workflow_file:
-    description: 过滤的 workflow 文件名 (须与 forgejo DB 的 workflow_id 一致, 即裸文件名)
+    description: 过滤的 workflow 文件名 (须与 forgejo DB 的 workflow_id 一致, 即裸文件名; 门禁档自指, 默认 ci-merge.yml)
     required: false
-    default: ci.yml
+    default: ci-merge.yml
 
 outputs:
   should_skip:

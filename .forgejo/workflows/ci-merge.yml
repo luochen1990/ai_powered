@@ -1,21 +1,37 @@
-# ai-powered — Forgejo Actions CI 门禁 (薄入口形态, 2026-09-10; 升级自 #33 v1 模板).
+# ─────────────────────────────────────────────────────────────────────────────
+# 薄入口骨架 — org 标准 CI P0 合入门禁 ci-merge (v3.0, 2026-09-16; 三档分级
+# ci-merge/ci-deploy/ci-periodic 见 lc-studio/forgejo-actions README)
+# ─────────────────────────────────────────────────────────────────────────────
+# 使用: 复制到目标仓库 .forgejo/workflows/ci-merge.yml, 拷贝 SSOT 的
+#   skip-if-passed action 到 .forgejo/actions/skip-if-passed/
+#   (tools/check-drift.sh 代劳校验), justfile 实现 `ci-merge` 契约 recipe。
+#   只改 ⟦⟧ 标记的 per-repo 字段。
 #
-# 三层架构 (设计依据与接入指南见 lc-studio/forgejo-actions README):
-#   骨架层  本文件 — check-drift 结构断言锁死 (forgejo-actions tools/check-drift.sh),
-#           人工仅改 ⟦⟧ 标记字段
-#   逻辑层  .forgejo/actions/skip-if-passed — 机器同步自 forgejo-actions SSOT,
-#           人工不改; 修改请到上游仓库再 sync
-#   契约层  Justfile `ci` recipe — 质量门禁各仓库自由实现
+# 门禁语义 (v3.0 命名即门禁): ci-merge 红 = 不能合入。P0 档职责 = 确保核心
+#   功能的可用性 (fmt/lint/typecheck/核心测试快档, 快步骤先行)。
 #
-# 各机制的完整踩坑注释 (为何 push 仅 master / edited 订阅 / draft 门禁 / 单 job 内联
-# skip / TOFU / key 清理) 在 SSOT 骨架模板头 (templates/ci.skeleton.yml, 含 v2→v2.1
-# 设计修正记录) 与 v1 模板, 本文件头只保留索引。
+# 分层 (详见 forgejo-actions README):
+#   骨架层  本文件 (含内联 checkout 链) — check-drift 结构断言锁死, 人工不改 (除 ⟦⟧ 字段)
+#   逻辑层  .forgejo/actions/skip-if-passed — 机器同步分发, 人工不改 (改 SSOT 上游)
+#   契约层  justfile 的 `ci-merge` recipe — 各仓库自由实现
 #
-# ⟦ai-powered⟧ 特有形态:
-#   - LLM provider env 块 (test/llm/* 认证, 见 step 内注释)
-#   - venv 持久卷 (VIRTUAL_ENV 指向 cache 卷; just ci 内戳块自愈重建)
-#   - runner label: vm-nix (org 共享, capacity=1 单槽位串行)。工具链 VM 预装, CI 禁 nix 求值。
-name: ci
+# [v3.0] 契约整体改名: ci → ci-merge (门禁语义命名; 存量仓库迁移手册见 README)。
+#
+# [v2.2] review 加固: check-drift 断言扩至 13 条 (just ci 接线 + skip 门禁 4 契约行),
+#   gate step 显式 success() 门, action jq null/路径形式防御, pnpm 缓存文档实测校准。
+#
+# [设计修正记录 v2→v2.1] checkout 曾尝试收进本地 action (checkout-tofu), 首跑实证
+#   失败: runner 执行到 uses step 时 workspace 尚未 checkout, 本地 action 文件
+#   不可读 ("no files found after reading paths: action.yml" — 鸡生蛋: 官方文档
+#   "forget to checkout" NOTE 的深层含义)。故 checkout 链 (SSH setup + TOFU +
+#   fetch + key 清理) 回归骨架内联, 由 check-drift.sh 的结构断言防漂移 (弱于哈希
+#   对比, 但安全关键行逐条覆盖); skip-if-passed 挪到 checkout 后, 保持本地 action。
+#
+# ⟦必改⟧ timeout-minutes: 冷/热路径实测预算 + 余量 (硬上限, 超时算 failure 阻塞合并)
+# ⟦可选⟧ env: 持久卷缓存重定向 (CARGO_TARGET_DIR / pnpm_config_store_dir / DENO_DIR /
+#        VIRTUAL_ENV+POETRY_CACHE_DIR / UV_CACHE_DIR+UV_PROJECT_ENVIRONMENT / npm_config_cache)
+# ⟦不改⟧ 其余全部 — 每个字段都有踩坑背书 (见 v1 模板注释)
+name: ci-merge
 
 on:
   push:
@@ -26,12 +42,12 @@ on:
     # 去 WIP 前缀 (PR ready) 时补跑 CI (draft PR 被 job if 跳过, 不订阅 edited
     # 则去 WIP 后拿不到补跑)
     types: [opened, synchronize, reopened, edited]
-  workflow_dispatch: # 手动重试: forgejo UI → Actions → ci → Run workflow
+  workflow_dispatch: # 手动重试: forgejo UI → Actions → ci-merge → Run workflow
 
 # PR 并发去旧: 同 PR 快速多次 push 取消旧 run (单槽位 runner 不被已 supersede 的
 # 旧 run 占位)。push 与 PR 的 ref 不同 (分支 ref vs head ref), 天然不同 group 不互踩。
 concurrency:
-  group: ci-pr-${{ github.event.pull_request.number || github.sha }}
+  group: ci-merge-pr-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 jobs:
@@ -41,7 +57,7 @@ jobs:
     # pull_request.draft = forgejo IsWorkInProgress(), 阻塞合并的同一 SSOT;
     # 全 skip 时 run 结论 skipped 非 success, 不污染 skip-if-passed)
     if: ${{ (github.event_name != 'push' || github.ref == 'refs/heads/master') && (github.event_name != 'pull_request' || github.event.pull_request.draft != true) }}
-    timeout-minutes: 30
+    timeout-minutes: 30 # ⟦必改⟧
     env:
       VIRTUAL_ENV: /var/lib/forgejo-runner/cache/ai-powered-venv
       POETRY_CACHE_DIR: /var/lib/forgejo-runner/cache/poetry
@@ -59,11 +75,11 @@ jobs:
       OPENAI_EXTRA_BODY: '{"temperature": 0}'
       DEBUG: "True"
     steps:
-      # ── checkout 链 (骨架内联; 无法 action 化, 见 SSOT 骨架模板头设计修正记录) ──
+      # ── checkout 链 (骨架内联; 无法 action 化, 见文件头设计修正记录) ──
       # 不用 actions/checkout: 实例 DISABLE_HTTP_GIT=true + SSH 用户名 forgejo +
       # 端口 5522, 官方 action 硬编码不兼容。host key TOFU: 优先 SSH_KNOWN_HOSTS
-      # secret 固定 (消除动态 keyscan 的 MITM 窗口); secret 缺失退回动态 keyscan +
-      # stderr 警告。服务端 host key 变更须同步轮换该 secret。
+      # secret 固定 (消除动态 keyscan 的 MITM 窗口, directory-algebra #89); secret
+      # 缺失退回动态 keyscan + stderr 警告。服务端 host key 变更须同步轮换该 secret。
       # PR 事件 fetch base+head (支持三点 diff); 其他事件浅克隆 --depth 1 省时。
       - name: Checkout via SSH
         env:
@@ -109,10 +125,9 @@ jobs:
         if: success() && github.event_name == 'push'
         continue-on-error: true
 
-      # 质量门禁 — 契约层入口, justfile 实现 `ci` recipe:
-      # install (venv 版本戳复用 + poetry sync) → pyright → flake8 → examples 全链
-      # (LLM 真端点, reruns 抗抖动; use_google_search deselect 见 recipe 注释)。
-      - name: Quality gate (just ci)
+      # 质量门禁 — 契约层入口, 各仓库 justfile 实现 `ci-merge` recipe:
+      # 快步骤先行 (fmt/lint/typecheck 先于慢测试), 阻塞级, 零参数, 失败即红。
+      - name: Quality gate (just ci-merge)
         # success() 同上 (显式默认门): checkout 失败时不进空 workspace 跑 just, 避免次级噪音
         if: success() && steps.skip.outputs.should_skip != 'true'
-        run: just ci
+        run: just ci-merge
