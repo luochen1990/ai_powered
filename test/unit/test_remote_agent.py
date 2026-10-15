@@ -434,3 +434,38 @@ def test_default_agent_has_no_tools_key(service_env: None) -> None:
 
     assert plain(1) == 42
     assert "tools" not in fake.registered_defn
+
+
+def test_task_template_class_attribute_passed_through(service_env: None) -> None:
+    ''' task_template 定制面: 继承子类的 ClassVar.task_template 原样透传进注册体 ——
+    注册方提供首条用户消息模板的通道 (语法 {{input.<参数名>}}, 参数名即 input_spec 顶层字段名,
+    与 agent-service 侧一致); SDK 只透传字符串, 渲染发生在服务端 '''
+    fake = FakeAgentService(task_script = [FakeAgentService._task_done({"result": "report"})])
+
+    class TemplateAgent(RemoteAgent):
+        task_template: ClassVar[str | None] = "请调研以下主题并输出报告:\n{{input.topic}}"
+        def _create_client(self, url: str) -> AgentServiceClient:
+            return AgentServiceClient(url, transport = fake.transport, poll_interval = 0.01)
+
+    @ai_powered(model = "fake-model", agent = TemplateAgent)
+    def research(topic: str) -> str:
+        ''' Research a topic. '''
+        ...
+
+    assert research("kw") == "report"
+    assert fake.registered_defn["task_template"] == "请调研以下主题并输出报告:\n{{input.topic}}"
+
+
+def test_default_agent_has_no_task_template_key(service_env: None) -> None:
+    ''' 默认路径: 注册体不含 task_template 键 (缺省 None 省略 —— 服务端 canonical 剥默认值,
+    注册方未提供模板时走服务端缺省渲染路径) '''
+    fake = FakeAgentService()
+    agent_cls = make_agent_cls(fake.transport)
+
+    @ai_powered(model = "fake-model", agent = agent_cls)
+    def plain(x: int) -> int:
+        ''' Plain. '''
+        ...
+
+    assert plain(1) == 42
+    assert "task_template" not in fake.registered_defn

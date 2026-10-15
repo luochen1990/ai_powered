@@ -171,6 +171,11 @@ class MyResearchAgent(RemoteAgent):
                                         # unknown name surfaces as RemoteContractError on
                                         # first-call registration. Default [] = sandbox
                                         # built-ins only (Bash/Read/Write/Edit/Grep/Glob).
+    task_template = "Research: {{input.topic}}"  # optional first-user-message template;
+                                        # `{{input.<param>}}` references a top-level input
+                                        # field (same syntax as agent-service). Omitted by
+                                        # default — the server then renders the structured
+                                        # input through its generic fallback path.
 
 @ai_powered(agent = MyResearchAgent)
 def research(topic: str) -> Report:

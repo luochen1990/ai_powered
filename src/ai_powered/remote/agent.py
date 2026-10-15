@@ -68,9 +68,13 @@ class RemoteAgent(FunctionAgent):
             invoke_timeout = 300.0                         # 任务级超时 = 提交+轮询总预算 (默认 120s —— 服务端沙箱任务典型 20-35s 量级)
             poll_interval = 1.0                            # 任务轮询间隔 (默认 0.5s, 固定间隔的决策见 client.py 头注释)
             tools = ["web-search", "akshare"]              # 宿主侧 MCP 工具白名单引用
+            task_template = "请调研: {{input.topic}}"         # 首条用户消息模板 (缺省 None 走服务端缺省渲染)
       tools 引用名须在服务端 AGENT_SERVICE_TOOL_CATALOG 目录内 (白名单服务端管控, 注册方只引用名);
       未知名在首次调用的注册期报 RemoteContractError (不可 retry) —— 客户端无法本地校验白名单,
       属已知的 fail-fast 边界. 默认 [] = 仅服务端沙箱六件套 (Bash/Read/Write/Edit/Grep/Glob).
+      task_template: 把结构化 input 渲染成自然语言任务指令 (首条用户消息) 的模板, 语法
+      {{input.<参数名>}} 与 agent-service 侧一致 (参数名即 input_spec 顶层字段名, SDK 编译保证);
+      缺省 None 不携带该键, 服务端走缺省渲染路径 (input 裸 JSON + 通用指引).
       priority/budget_tokens: 调度参数透传 (M1a 提交信封, 见 client.py 模块头)
       更深度的定制可覆盖 _build_definition 整体接管 defn 组装 (开放出口, 对齐 _create_client 的 seam 惯例).
 
@@ -83,6 +87,10 @@ class RemoteAgent(FunctionAgent):
     invoke_timeout: ClassVar[float] = DEFAULT_INVOKE_TIMEOUT
     poll_interval: ClassVar[float] = DEFAULT_POLL_INTERVAL
     tools: ClassVar[list[str]] = []
+    #: 首条用户消息模板 (agent-service 把结构化 input 渲染成自然语言任务指令的唯一通道):
+    #: 语法 {{input.<参数名>}} (参数名即 input_spec 顶层字段名, SDK 编译保证); 缺省 None
+    #: 不携带该键, 服务端走缺省渲染路径 —— 见类 docstring
+    task_template: ClassVar[str | None] = None
     required_features: ClassVar[set[ModelFeature]] = set()
     #: 调度参数 (M1a 信封透传, agent-service issue #30 spec §10): priority 大者优先,
     #: budget_tokens 为任务 token 预算 (服务端预授+结算不可超); agent 级常量 (同一
@@ -142,6 +150,8 @@ class RemoteAgent(FunctionAgent):
         }
         if type(self).tools:  # 空列表省略 —— 服务端 canonical 化剥默认值, 发空与不发同 id, 不发更净
             defn["tools"] = list(type(self).tools)
+        if type(self).task_template is not None:  # 缺省 None 省略键 —— 与 tools 同款 canonical 剥缺省幂等域
+            defn["task_template"] = type(self).task_template
         return defn
 
     @sync_compatible
